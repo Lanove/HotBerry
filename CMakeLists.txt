@@ -33,6 +33,7 @@ target_link_libraries(HotBerry
 # Add any user requested libraries
 target_link_libraries(HotBerry 
     pico_bootsel_via_double_reset
+    hardware_clocks
     )
 
 pico_add_extra_outputs(HotBerry)

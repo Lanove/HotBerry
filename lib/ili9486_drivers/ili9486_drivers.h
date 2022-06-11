@@ -25,24 +25,28 @@ struct PanelConfig
     uint8_t rotation;
 };
 
+struct rgb565_t
+{
+    uint8_t r : 5;
+    uint8_t g : 6;
+    uint8_t b : 5;
+};
+
 class ili9486_drivers
 {
 public:
     ili9486_drivers(uint8_t *_pins_data, uint8_t _pin_rst, uint8_t _pin_cs, uint8_t _pin_rs, uint8_t _pin_wr, uint8_t _pin_rd);
     void init();
     void setAddressWindow(int32_t x, int32_t y, int32_t w, int32_t h);
-    void pushColors();
+    void setWindow(int32_t x0, int32_t y0,int32_t x1, int32_t y1);
+    uint16_t create565Color(uint8_t r, uint8_t g, uint8_t b);
+    void fillScreen(uint16_t color);
 private:
-    void dataDirectionRead();
-    void dataDirectionWrite();
     void startWrite();
     void endWrite();
-    void startRead();
-    void endRead();
     void writeCommand(uint8_t cmd);
     void writeData(uint8_t data);
     void putByte(uint8_t data);
-    uint8_t readData();
     /**
      * @brief
      * A 8-bit parallel bi-directional data bus for MCU system

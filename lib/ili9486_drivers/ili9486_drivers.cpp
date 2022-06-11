@@ -29,9 +29,9 @@ ili9486_drivers::ili9486_drivers(uint8_t *_pins_data, uint8_t _pin_rst, uint8_t 
     for (int i = 0; i < 8; i++)
     {
         gpio_init(pins_data[i]);
+        gpio_set_dir(pins_data[i], GPIO_OUT);
     }
-    dataDirectionWrite();
-
+    
     gpio_init(pin_cs);
     gpio_init(pin_rs);
     gpio_init(pin_rst);
@@ -60,14 +60,14 @@ void ili9486_drivers::init()
     sleep_us(15); // Reset pulse duration minimal 10uS
     gpio_put(pin_rst, 1);
     sleep_ms(120); // It is necessary to wait 5msec after releasing RESX before sending commands. Also Sleep Out command cannot be sent for 120msec.
-    const uint8_t *initCommand_ptr = initCommands;
+    const uint8_t *initCommand_ptr = initCommands_bodmer;
+    startWrite();
     for (;;)
     { // For each command...
         uint8_t cmd = *initCommand_ptr++;
         uint8_t num = *initCommand_ptr++; // Number of args to follow
         if (cmd == 0xFF && num == 0xFF)
             break;
-        startWrite();
         writeCommand(cmd);                 // Read, issue command
         uint_fast8_t ms = num & CMD_Delay; // If hibit set, delay follows args
         num &= ~CMD_Delay;                 // Mask out delay bit
@@ -84,28 +84,18 @@ void ili9486_drivers::init()
             sleep_ms((ms == 255 ? 500 : ms));
         }
     }
+
+    setAddressWindow(0, 0, 320, 480);
+    fillScreen(create565Color(255,0,0));
     endWrite();
 }
 
 void ili9486_drivers::startWrite()
 {
     gpio_put(pin_cs, 0);
-    dataDirectionWrite();
 }
 
 void ili9486_drivers::endWrite()
-{
-    gpio_put(pin_cs, 1);
-    dataDirectionRead();
-}
-
-void ili9486_drivers::startRead()
-{
-    gpio_put(pin_cs, 0);
-    dataDirectionRead();
-}
-
-void ili9486_drivers::endRead()
 {
     gpio_put(pin_cs, 1);
 }
@@ -130,6 +120,43 @@ void ili9486_drivers::writeData(uint8_t data)
     gpio_put(pin_wr, 1);
 }
 
+void ili9486_drivers::setWindow(int32_t x0, int32_t y0, int32_t x1, int32_t y1)
+{
+    writeCommand(CMD_ColumnAddressSet);
+    writeData(x0 >> 8);
+    writeData(x0 & 0xFF);
+    writeData(x1 >> 8);
+    writeData(x1 & 0xFF);
+
+    writeCommand(CMD_PageAddressSet);
+    writeData(y0 >> 8);
+    writeData(y0 & 0xFF);
+    writeData(y1 >> 8);
+    writeData(y1 & 0xFF);
+}
+
+void ili9486_drivers::setAddressWindow(int32_t x, int32_t y, int32_t w, int32_t h)
+{
+    int16_t xEnd = x + w - 1, yEnd = y + h - 1;
+    setWindow(x, y, xEnd, yEnd);
+}
+
+void ili9486_drivers::fillScreen(uint16_t color)
+{
+    int len = 480*320;
+    writeCommand(CMD_MemoryWrite);
+    while (len--)
+    {
+        writeData(color >> 8);
+        writeData(color & 0xFF);
+    }
+}
+
+uint16_t ili9486_drivers::create565Color(uint8_t r, uint8_t g, uint8_t b)
+{
+    return ((r & 0x1F) << 11) | ((g & 0x3F) << 5) | (b & 0x1F);
+}
+
 void ili9486_drivers::putByte(uint8_t data)
 {
     uint32_t output_mask = 0;
@@ -138,25 +165,4 @@ void ili9486_drivers::putByte(uint8_t data)
         output_mask |= (((data) >> (i)) & 0x01) << pins_data[i];
     }
     gpio_put_masked(data_mask, output_mask);
-}
-
-uint8_t ili9486_drivers::readData()
-{
-
-}
-
-void ili9486_drivers::dataDirectionRead()
-{
-    for (int i = 0; i < 8; i++)
-    {
-        gpio_set_dir(pins_data[i], GPIO_IN);
-    }
-}
-
-void ili9486_drivers::dataDirectionWrite()
-{
-    for (int i = 0; i < 8; i++)
-    {
-        gpio_set_dir(pins_data[i], GPIO_OUT);
-    }
 }
