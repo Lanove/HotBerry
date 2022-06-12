@@ -12,5 +12,9 @@
     "buildTarget" : {
       "visibility": "hidden"
                },
-     },
+    },
+    "files.associations": {
+      "resets.h": "c",
+      "adc.h": "c"
+    },
 }

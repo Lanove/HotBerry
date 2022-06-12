@@ -5,14 +5,12 @@
 #include "hardware/clocks.h"
 #include "hardware/structs/pll.h"
 #include "hardware/structs/clocks.h"
+#include "hardware/structs/rosc.h"
 #include "hardware/adc.h"
 #include <tusb.h>
 
 #define HIGH 1
 #define LOW 0
-
-static constexpr uint16_t xPlateResistance = 241; // Measured resistance between XP and XM
-static constexpr uint16_t zThreshold = 20;
 
 enum IO
 {
@@ -59,7 +57,7 @@ enum IO
 };
 
 uint8_t tft_dataPins[8] = {TFT_D0, TFT_D1, TFT_D2, TFT_D3, TFT_D4, TFT_D5, TFT_D6, TFT_D7};
-// ili9486_drivers tft(tft_dataPins, TFT_RST, TFT_CS, TFT_RS, TFT_WR, TFT_RD);
+ili9486_drivers tft(tft_dataPins, TFT_RST, TFT_CS, TFT_RS, TFT_WR, TFT_RD, TOUCH_XP, TOUCH_XM, TOUCH_YP, TOUCH_YM, TOUCH_XP_ADC_CHANNEL, TOUCH_YM_ADC_CHANNEL);
 
 void shiftData8(uint8_t data)
 {
@@ -96,53 +94,23 @@ void measure_freqs(void)
     // Can't measure clk_ref / xosc as it is the ref
 }
 
-void readTouch(uint16_t &x, uint16_t &y, uint16_t &z)
-{
-    uint16_t samples[2] = {0}; // X and Y is sampled twice
-    gpio_set_dir(TOUCH_YP, GPIO_OUT);
-    gpio_set_dir(TOUCH_YM, GPIO_OUT);
-    gpio_set_dir(TOUCH_XM, GPIO_IN);
-    gpio_set_dir(TOUCH_XP, GPIO_IN);
+uint32_t rnd_whitened(void){
+    int k, random=0;
+    int random_bit1, random_bit2;
+    volatile uint32_t *rnd_reg=(uint32_t *)(ROSC_BASE + ROSC_RANDOMBIT_OFFSET);
+    
+    for(k=0;k<32;k++){
+        while(1){
+            random_bit1=0x00000001 & (*rnd_reg);
+            random_bit2=0x00000001 & (*rnd_reg);
+            if(random_bit1!=random_bit2) break;
+        }
 
-    gpio_put(TOUCH_YM, 1);
-    gpio_put(TOUCH_YP, 0);
+	random = random << 1;        
+        random=random + random_bit1;
 
-    adc_select_input(TOUCH_XP_ADC_CHANNEL);
-    samples[0] = adc_read();
-    samples[1] = adc_read();
-    x = (samples[0] + samples[1]) / 2;
-
-    gpio_set_dir(TOUCH_XM, GPIO_OUT);
-    gpio_set_dir(TOUCH_XP, GPIO_OUT);
-    gpio_set_dir(TOUCH_YP, GPIO_IN);
-    gpio_set_dir(TOUCH_YM, GPIO_IN);
-
-    gpio_put(TOUCH_XM, 0);
-    gpio_put(TOUCH_XP, 1);
-
-    adc_select_input(TOUCH_YM_ADC_CHANNEL);
-    samples[0] = adc_read();
-    samples[1] = adc_read();
-    y = (samples[0] + samples[1]) / 2;
-
-    // From AVR341:AVR341:Four and five-wire Touch Screen Controller
-    gpio_set_dir(TOUCH_YP, GPIO_OUT);
-    gpio_set_dir(TOUCH_XM, GPIO_OUT);
-    gpio_set_dir(TOUCH_YM, GPIO_IN);
-    gpio_set_dir(TOUCH_XP, GPIO_IN);
-
-    gpio_put(TOUCH_YP, 1);
-    gpio_put(TOUCH_XM, 0);
-
-    adc_select_input(TOUCH_XP_ADC_CHANNEL);
-    uint16_t z1 = adc_read();
-    adc_select_input(TOUCH_YM_ADC_CHANNEL);
-    uint16_t z2 = adc_read();
-
-    // Equation 2.1 from AVR341 docs
-    float rtouch;
-    rtouch = xPlateResistance * x / 4096 * ((z2 / z1) - 1);
-    z = rtouch;
+    }
+    return random;
 }
 
 int main()
@@ -157,24 +125,16 @@ int main()
     else
         printf("system clock now %dMHz\n", freq_mhz);
     measure_freqs();
-    // tft.init();
-
-    adc_init();
-    adc_gpio_init(TOUCH_XP_ADC_CHANNEL);
-    adc_gpio_init(TOUCH_YM_ADC_CHANNEL);
-
-    gpio_init(TOUCH_XP);
-    gpio_init(TOUCH_XM);
-    gpio_init(TOUCH_YM);
-    gpio_init(TOUCH_YP);
+    tft.init();
 
     while (true)
     {
-        uint16_t x = 0, y = 0, z = 0;
-        readTouch(x, y, z);
-        if (z > zThreshold)
-            printf("x=%d y=%d z=%d\n", x, y, z);
-        sleep_ms(100);
+        uint16_t color = rnd_whitened() % 65536;
+        tft.fillScreen(color);
+        TouchCoordinate tc;
+        tft.sampleTouch(tc);
+        if (tft.isTouchValid(tc))
+            printf("x=%d y=%d z=%d\n", tc.x, tc.y, tc.z);
     }
     return 0;
 }

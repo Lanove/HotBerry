@@ -13,6 +13,6 @@ file(GLOB FILES *.cpp *.h)
 add_library(ili9486_drivers ${FILES})
 
 # Add the standard library to the build
-target_link_libraries(ili9486_drivers pico_stdlib)
+target_link_libraries(ili9486_drivers pico_stdlib hardware_adc)
 
 target_include_directories(ili9486_drivers PUBLIC ./)
