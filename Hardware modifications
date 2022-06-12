@@ -1,0 +1,30 @@
+Modified on TFT Shield : 
+    TFT LCD D0 to D7 changed from
+    D1 - GPIO 8
+    D0 - GPIO 9
+    D7 - GPIO 10
+    D6 - GPIO 11
+    D5 - GPIO 12
+    D4 - GPIO 13
+    D3 - GPIO 14
+    D2 - GPIO 15
+    to
+    D0 - GPIO8
+    D1 - GPIO9
+    D2 - GPIO10
+    D3 - GPIO11
+    D4 - GPIO12
+    D5 - GPIO13
+    D6 - GPIO14
+    D7 - GPIO15
+
+    Changed Touch pins from
+    X+ - TFT_RS
+    X- - D0
+    Y+ - D1
+    Y- - TFT_CS
+    to
+    X+ - TFT_RD
+    X- - SD_CS
+    Y+ - SD_DO (SD_TX)
+    Y- - TFT_CS

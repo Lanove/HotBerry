@@ -47,6 +47,7 @@ private:
     void writeCommand(uint8_t cmd);
     void writeData(uint8_t data);
     void putByte(uint8_t data);
+    void writeDataFast(uint8_t data);
     /**
      * @brief
      * A 8-bit parallel bi-directional data bus for MCU system

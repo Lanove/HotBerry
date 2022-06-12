@@ -85,7 +85,6 @@ void ili9486_drivers::init()
         }
     }
 
-    setAddressWindow(0, 0, 320, 480);
     fillScreen(create565Color(255,0,0));
     endWrite();
 }
@@ -120,6 +119,14 @@ void ili9486_drivers::writeData(uint8_t data)
     gpio_put(pin_wr, 1);
 }
 
+void ili9486_drivers::writeDataFast(uint8_t data)
+{
+    // putByte(data);
+    gpio_put_masked(data_mask, data << 8);
+    gpio_put(pin_wr, 0);
+    gpio_put(pin_wr, 1);
+}
+
 void ili9486_drivers::setWindow(int32_t x0, int32_t y0, int32_t x1, int32_t y1)
 {
     writeCommand(CMD_ColumnAddressSet);
@@ -144,11 +151,14 @@ void ili9486_drivers::setAddressWindow(int32_t x, int32_t y, int32_t w, int32_t 
 void ili9486_drivers::fillScreen(uint16_t color)
 {
     int len = 480*320;
+    setAddressWindow(0, 0, 320, 480);
     writeCommand(CMD_MemoryWrite);
+    gpio_put(pin_rs, 1);
+    gpio_put(pin_rd, 1);
     while (len--)
     {
-        writeData(color >> 8);
-        writeData(color & 0xFF);
+        writeDataFast(color >> 8);
+        writeDataFast(color & 0xFF);
     }
 }
 
@@ -159,10 +169,5 @@ uint16_t ili9486_drivers::create565Color(uint8_t r, uint8_t g, uint8_t b)
 
 void ili9486_drivers::putByte(uint8_t data)
 {
-    uint32_t output_mask = 0;
-    for (int i = 0; i < 8; i++)
-    {
-        output_mask |= (((data) >> (i)) & 0x01) << pins_data[i];
-    }
-    gpio_put_masked(data_mask, output_mask);
+    gpio_put_masked(data_mask, data << 8);
 }
