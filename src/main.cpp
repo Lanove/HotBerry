@@ -139,16 +139,13 @@ int main()
     measure_freqs();
     tft->init();
     tft->swapTouchXY(true);
-    tft->selectTFT();
-    tft->fillScreen(tft->create565Color(255, 0, 0));
-    tft->deselectTFT();
-    // init_lvgl();
-    // lv_demo_widgets();
+    init_lvgl();
+    lv_demo_benchmark();
     struct repeating_timer timer;
-    // add_repeating_timer_ms(5, lv_tick_inc_cb, NULL, &timer);
+    add_repeating_timer_ms(4, lv_tick_inc_cb, NULL, &timer);
     while (true)
     {
-        // lv_task_handler();
+        lv_task_handler();
         sleep_ms(1);
     }
     return 0;
@@ -157,16 +154,16 @@ int main()
 void init_lvgl()
 {
     lv_init();
-    static constexpr size_t displayBufferSize = 320 * 200;
+    static constexpr size_t displayBufferSize = 320 * 100;
     /*A static or global variable to store the buffers*/
     static lv_disp_draw_buf_t disp_buf;
 
     /*Static or global buffer(s). The second buffer is optional*/
     static lv_color_t buf[displayBufferSize]; //
-    // static lv_color_t buf2[displayBufferSize];
+    static lv_color_t buf2[displayBufferSize];
 
     /*Initialize `disp_buf` with the buffer(s). With only one buffer use NULL instead buf_2 */
-    lv_disp_draw_buf_init(&disp_buf, buf, NULL, displayBufferSize);
+    lv_disp_draw_buf_init(&disp_buf, buf, buf2, displayBufferSize);
 
     /*Initialize the display*/
     static lv_disp_drv_t disp_drv;
@@ -188,7 +185,7 @@ void init_lvgl()
 
 bool lv_tick_inc_cb(struct repeating_timer *t)
 {
-    lv_tick_inc(5);
+    lv_tick_inc(4);
     return true;
 }
 
@@ -197,10 +194,9 @@ void lv_display_flush_cb(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t 
     uint32_t w = (area->x2 - area->x1 + 1);
     uint32_t h = (area->y2 - area->y1 + 1);
 
-    // tft->selectTFT();
-    // tft->setAddressWindow(area->x1, area->y1, w, h);
-    // tft.pushColors( ( uint16_t * )&color_p->full, w * h, true );
-    // tft->pushColors((uint16_t *)&color_p->full, w * h);
+    tft->selectTFT();
+    tft->setAddressWindow(area->x1, area->y1, w, h);
+    tft->pushColors((uint16_t *)&color_p->full, w * h);
     // tft->deselectTFT();
 
     lv_disp_flush_ready(disp);
@@ -209,7 +205,7 @@ void lv_display_flush_cb(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t 
 void lv_input_touch_cb(lv_indev_drv_t *indev_driver, lv_indev_data_t *data)
 {
     TouchCoordinate tc;
-    // tft->sampleTouch(tc);
+    tft->sampleTouch(tc);
     if (!tft->isTouchValid(tc))
         data->state = LV_INDEV_STATE_REL;
     else

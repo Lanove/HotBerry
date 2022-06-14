@@ -73,7 +73,7 @@ void ili9486_drivers::init()
     gpio_put(pin_rst, 1);
     sleep_ms(120); // It is necessary to wait 5msec after releasing RESX before sending commands. Also Sleep Out command cannot be sent for 120msec.
     const uint8_t *initCommand_ptr = initCommands_bodmer;
-    gpio_put(pin_cs, 0); // Select TFT
+    gpio_put(pin_cs, 0); // Select TFT manually
     for (;;)
     { // For each command...
         uint8_t cmd = *initCommand_ptr++;
@@ -107,8 +107,9 @@ void ili9486_drivers::init()
             sleep_ms((ms == 255 ? 500 : ms));
         }
     }
-    gpio_put(pin_cs, 1); // deselect TFT
     pioinit(pio_clock_int_divider, pio_clock_frac_divider);
+    fillScreen(0);
+    deselectTFT(); // Deselect TFT after PIO idle
 }
 
 void ili9486_drivers::pioinit(uint16_t clock_div, uint16_t fract_div)
@@ -185,6 +186,54 @@ void ili9486_drivers::pushBlock(uint16_t color, uint32_t len)
     }
 }
 
+void ili9486_drivers::setWindow(int32_t x0, int32_t y0, int32_t x1, int32_t y1)
+{
+    WAIT_FOR_STALL;
+    tft_pio->sm[pio_sm].instr = pio_instr_addr;
+
+    TX_FIFO = CMD_ColumnAddressSet;
+    TX_FIFO = (x0 << 16) | x1;
+    TX_FIFO = CMD_PageAddressSet;
+    TX_FIFO = (y0 << 16) | y1;
+    TX_FIFO = CMD_MemoryWrite;
+}
+
+void ili9486_drivers::setAddressWindow(int32_t x, int32_t y, int32_t w, int32_t h)
+{
+    int16_t xEnd = x + w - 1, yEnd = y + h - 1;
+    setWindow(x, y, xEnd, yEnd);
+}
+
+void ili9486_drivers::fillScreen(uint16_t color)
+{
+    uint32_t len = 480 * 320;
+    setAddressWindow(0, 0, 320, 480);
+    pushBlock(color, len);
+}
+
+void ili9486_drivers::pushColors(uint16_t *color, uint32_t len)
+{
+    const uint16_t *data = color;
+    while (len > 4)
+    {
+        WAIT_FOR_FIFO_FREE(5);
+        TX_FIFO = data[0];
+        TX_FIFO = data[1];
+        TX_FIFO = data[2];
+        TX_FIFO = data[3];
+        TX_FIFO = data[4];
+        data += 5;
+        len -= 5;
+    }
+
+    if (len)
+    {
+        WAIT_FOR_FIFO_FREE(4);
+        while (len--)
+            TX_FIFO = *data++;
+    }
+}
+
 void ili9486_drivers::sampleTouch(TouchCoordinate &tc)
 {
     // The whole function typically takes 25uS at 250MHz overlocked sysclock (taken with time_us_64())
@@ -250,45 +299,6 @@ void ili9486_drivers::sampleTouch(TouchCoordinate &tc)
     gpio_set_dir(pin_xm, GPIO_OUT);
     gpio_set_dir(pin_ym, GPIO_OUT);
     gpio_set_dir(pin_xp, GPIO_OUT);
-}
-
-void ili9486_drivers::setWindow(int32_t x0, int32_t y0, int32_t x1, int32_t y1)
-{
-    WAIT_FOR_STALL;
-    tft_pio->sm[pio_sm].instr = pio_instr_addr;
-
-    TX_FIFO = CMD_ColumnAddressSet;
-    TX_FIFO = (x0 << 16) | x1;
-    TX_FIFO = CMD_PageAddressSet;
-    TX_FIFO = (y0 << 16) | y1;
-    TX_FIFO = CMD_MemoryWrite;
-}
-
-void ili9486_drivers::setAddressWindow(int32_t x, int32_t y, int32_t w, int32_t h)
-{
-    int16_t xEnd = x + w - 1, yEnd = y + h - 1;
-    setWindow(x, y, xEnd, yEnd);
-}
-
-void ili9486_drivers::fillScreen(uint16_t color)
-{
-    int len = 480 * 320;
-    setAddressWindow(0, 0, 320, 480);
-    pushBlock(color, len);
-}
-
-void ili9486_drivers::pushColors(uint16_t *color, uint32_t len)
-{
-    // uint32_t i = 0;
-    // writeCommand(CMD_MemoryWrite);
-    // gpio_put(pin_rs, 1);
-    // gpio_put(pin_rd, 1);
-    // while (i < len)
-    // {
-    //     writeDataFast(color[i] >> 8);
-    //     writeDataFast(color[i] & 0xFF);
-    //     i++;
-    // }
 }
 
 uint16_t ili9486_drivers::create565Color(uint8_t r, uint8_t g, uint8_t b)

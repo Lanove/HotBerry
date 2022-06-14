@@ -66,7 +66,6 @@ static constexpr uint16_t touch_yCoordinateMin = 650;
 static constexpr uint32_t pio_clock_int_divider = 4;
 static constexpr uint32_t pio_clock_frac_divider = 0;
 
-
 struct TouchCoordinate
 {
     uint16_t x = 0, y = 0, z = 0;
@@ -128,7 +127,11 @@ public:
         WAIT_FOR_STALL;
         gpio_put(pin_cs, 0);
     }
-    __force_inline void deselectTFT() { gpio_put(pin_cs, 1); }
+    __force_inline void deselectTFT()
+    {
+        WAIT_FOR_STALL;
+        gpio_put(pin_cs, 1);
+    }
     __force_inline void swapTouchXY(bool swap) { touch_swapxy = swap; }
 
 private:
