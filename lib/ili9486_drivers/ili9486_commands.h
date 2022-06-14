@@ -107,7 +107,7 @@ static constexpr uint8_t CMD_Delay = 0x80;
 
 static constexpr uint8_t initCommands_lovyan[] =
     {
-        CMD_PowerControl1, 2, 0x17,               // VRH1 -- VREG1OUT is 5.00, used for positive gamma
+        CMD_SoftReset, 2, 0x17,                   // VRH1 -- VREG1OUT is 5.00, used for positive gamma
         0x15,                                     // VRH2 -- VREG2OUT is -4.8750, used for negative gamma
         CMD_PowerControl2, 1, 0x41,               // VGH = Vci1x6, VGL = -Vci1 4. Note: To prevent the device damage, please keep VGH – DDVDH < 8V condition.
         CMD_VCOMControl1, 3, 0x00,                // nVM -- 0 : NV memory is not programmed
@@ -136,23 +136,38 @@ static constexpr uint8_t initCommands_lovyan[] =
         0xFF, 0xFF, // end
 };
 
-static constexpr uint8_t initCommands_bodmer[] =
+static constexpr uint8_t initCommands_bodmer_lovyan[] =
     {
-        CMD_PowerControl1, 2, 0x17,               // VRH1 -- VREG1OUT is 5.00, used for positive gamma
-        0x15,                                     // VRH2 -- VREG2OUT is -4.8750, used for negative gamma
-        CMD_PowerControl2, 1, 0x41,               // VGH = Vci1x6, VGL = -Vci1 4. Note: To prevent the device damage, please keep VGH – DDVDH < 8V condition.
+        CMD_PowerControl1, 2, 0x17, // VRH1 -- VREG1OUT is 5.00, used for positive gamma
+        0x15,                       // VRH2 -- VREG2OUT is -4.8750, used for negative gamma
+        CMD_PowerControl2, 1, 0x41, // VGH = Vci1x6, VGL = -Vci1 4. Note: To prevent the device damage, please keep VGH – DDVDH < 8V condition.
         CMD_PowerControl3, 1, 0x44,
         CMD_VCOMControl1, 3, 0x00,                // nVM -- 0 : NV memory is not programmed
         0x12,                                     // VCM_REG [7:0] is used to set factor to generate VCOM voltage from the reference voltage VREG2OUT. -- VCOM = -1.71875
         0x80,                                     // VCM_REG_EN -- 1: VCOM value from VCM_REG [7:0].
         CMD_FrameRateControl_NormalMode, 1, 0xD0, // Frame rate = 90Hz
-        CMD_InterfacePixelFormat, 1, 0x55, // Interface pixel format 16-bit RGB
-        CMD_MemoryAccessControl, 1, 0x48, // Portrait
+        CMD_InterfacePixelFormat, 1, 0x55,        // Interface pixel format 16-bit RGB
+        CMD_MemoryAccessControl, 1, 0x48,         // Portrait
         CMD_PositiveGammaControl, 15, 0x0F, 0x1F, 0x1C, 0x0C, 0x0F, 0x08, 0x48, 0x98, 0x37, 0x0A, 0x13, 0x04, 0x11, 0x0D, 0x00,
         CMD_NegativeGammaControl, 15, 0x0F, 0x32, 0x2E, 0x0B, 0x0D, 0x05, 0x47, 0x75, 0x37, 0x06, 0x10, 0x03, 0x24, 0x20, 0x00,
         CMD_SleepOut, 0 + CMD_Delay, 120, // Exit sleep mode It will be necessary to wait 5msec before sending next command; this is to allow time for the supply voltages and clock circuits to stabilize
         CMD_IdleModeOff, 0,
         CMD_DisplayOn, 0 + CMD_Delay, 100,
+        0xFF, 0xFF, // end
+};
+
+static constexpr uint8_t initCommands_bodmer[] =
+    {
+        CMD_SoftReset, 0 + CMD_Delay, 120,
+        CMD_SleepOut, 0 + CMD_Delay, 120,
+        CMD_InterfacePixelFormat, 1, 0x55,
+        CMD_PowerControl3, 1, 0x44,
+        CMD_VCOMControl1, 4, 0x00, 0x00, 0x00, 0x00,
+        CMD_PositiveGammaControl, 15, 0x0F, 0x1F, 0x1C, 0x0C, 0x0F, 0x08, 0x48, 0x98, 0x37, 0x0A, 0x13, 0x04, 0x11, 0x0D, 0x00,
+        CMD_NegativeGammaControl, 15, 0x0F, 0x32, 0x2E, 0x0B, 0x0D, 0x05, 0x47, 0x75, 0x37, 0x06, 0x10, 0x03, 0x24, 0x20, 0x00,
+        CMD_DisplayInversionOff, 0,
+        CMD_MemoryAccessControl, 1, 0x48,
+        CMD_DisplayOn, 0 + CMD_Delay, 150,
         0xFF, 0xFF, // end
 };
 

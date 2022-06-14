@@ -200,7 +200,7 @@ void ili9486_drivers::setWindow(int32_t x0, int32_t y0, int32_t x1, int32_t y1)
 
 void ili9486_drivers::setAddressWindow(int32_t x, int32_t y, int32_t w, int32_t h)
 {
-    int16_t xEnd = x + w - 1, yEnd = y + h - 1;
+    int32_t xEnd = x + w - 1, yEnd = y + h - 1;
     setWindow(x, y, xEnd, yEnd);
 }
 
