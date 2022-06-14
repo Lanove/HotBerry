@@ -140,7 +140,7 @@ int main()
     tft->init();
     tft->swapTouchXY(true);
     init_lvgl();
-    lv_demo_benchmark();
+    lv_demo_widgets();
     struct repeating_timer timer;
     add_repeating_timer_ms(5, lv_tick_inc_cb, NULL, &timer);
     while (true)
@@ -176,11 +176,11 @@ void init_lvgl()
     lv_disp_drv_register(&disp_drv);
 
     /*Initialize the (dummy) input device driver*/
-    // static lv_indev_drv_t indev_drv;
-    // lv_indev_drv_init(&indev_drv);
-    // indev_drv.type = LV_INDEV_TYPE_POINTER;
-    // indev_drv.read_cb = lv_input_touch_cb;
-    // lv_indev_drv_register(&indev_drv);
+    static lv_indev_drv_t indev_drv;
+    lv_indev_drv_init(&indev_drv);
+    indev_drv.type = LV_INDEV_TYPE_POINTER;
+    indev_drv.read_cb = lv_input_touch_cb;
+    lv_indev_drv_register(&indev_drv);
 }
 
 bool lv_tick_inc_cb(struct repeating_timer *t)
@@ -205,7 +205,7 @@ void lv_display_flush_cb(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t 
 void lv_input_touch_cb(lv_indev_drv_t *indev_driver, lv_indev_data_t *data)
 {
     TouchCoordinate tc;
-    // tft->sampleTouch(tc);
+    tft->sampleTouch(tc);
     if (!tft->isTouchValid(tc))
         data->state = LV_INDEV_STATE_REL;
     else

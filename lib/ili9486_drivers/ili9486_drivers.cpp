@@ -36,6 +36,8 @@ ili9486_drivers::ili9486_drivers(uint8_t *_pins_data, uint8_t _pin_rst, uint8_t 
     {
         gpio_init(pins_data[i]);
         gpio_set_dir(pins_data[i], GPIO_OUT);
+        gpio_set_drive_strength(pins_data[i], GPIO_DRIVE_STRENGTH_12MA);
+        gpio_set_slew_rate(pins_data[i], GPIO_SLEW_RATE_FAST);
     }
 
     adc_init();
@@ -55,6 +57,17 @@ ili9486_drivers::ili9486_drivers(uint8_t *_pins_data, uint8_t _pin_rst, uint8_t 
     gpio_set_dir(pin_rst, GPIO_OUT);
     gpio_set_dir(pin_wr, GPIO_OUT);
     gpio_set_dir(pin_rd, GPIO_OUT);
+
+    gpio_set_drive_strength(pin_cs, GPIO_DRIVE_STRENGTH_12MA);
+    gpio_set_drive_strength(pin_rs, GPIO_DRIVE_STRENGTH_12MA);
+    gpio_set_drive_strength(pin_rst, GPIO_DRIVE_STRENGTH_12MA);
+    gpio_set_drive_strength(pin_wr, GPIO_DRIVE_STRENGTH_12MA);
+    gpio_set_drive_strength(pin_rd, GPIO_DRIVE_STRENGTH_12MA);
+    gpio_set_slew_rate(pin_cs, GPIO_SLEW_RATE_FAST);
+    gpio_set_slew_rate(pin_rs, GPIO_SLEW_RATE_FAST);
+    gpio_set_slew_rate(pin_rst, GPIO_SLEW_RATE_FAST);
+    gpio_set_slew_rate(pin_wr, GPIO_SLEW_RATE_FAST);
+    gpio_set_slew_rate(pin_rd, GPIO_SLEW_RATE_FAST);
 
     gpio_put(pin_cs, 1);
     gpio_put(pin_rst, 1);

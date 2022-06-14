@@ -1,3 +1,6 @@
+Modified on HotBerry board :
+    Remove all series resistor on TFT data lines (Resistor network)
+
 Modified on TFT Shield : 
     TFT LCD D0 to D7 changed from
     D1 - GPIO 8

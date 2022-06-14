@@ -63,7 +63,7 @@ static constexpr uint16_t touch_xCoordinateMin = 400;
 static constexpr uint16_t touch_yCoordinateMax = 3000;
 static constexpr uint16_t touch_yCoordinateMin = 650;
 // PIO runs at sysclk/2, 125MHz, (write cycle of 64ns)
-static constexpr uint32_t pio_clock_int_divider = 4;
+static constexpr uint32_t pio_clock_int_divider = 2;
 static constexpr uint32_t pio_clock_frac_divider = 0;
 
 struct TouchCoordinate
