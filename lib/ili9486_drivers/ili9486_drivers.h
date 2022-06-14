@@ -14,6 +14,46 @@
 
 #include "pico/stdlib.h"
 #include "ili9486_commands.h"
+#include "pio_8bit_parallel.pio.h"
+#include "hardware/pio.h"
+
+// Wait for the PIO to stall (SM pull request finds no data in TX FIFO)
+// This is used to detect when the SM is idle and hence ready for a jump instruction
+#define WAIT_FOR_STALL                 \
+    tft_pio->fdebug = pull_stall_mask; \
+    while (!(tft_pio->fdebug & pull_stall_mask))
+
+// Wait until at least "S" locations free
+#define WAIT_FOR_FIFO_FREE(S)                                      \
+    while (((tft_pio->flevel >> (pio_sm * 8)) & 0x000F) > (8 - S)) \
+    {                                                              \
+    }
+
+// Wait until at least 5 locations free
+#define WAIT_FOR_FIFO_5_FREE                             \
+    while ((tft_pio->flevel) & (0x000c << (pio_sm * 8))) \
+    {                                                    \
+    }
+
+// Wait until at least 1 location free
+#define WAIT_FOR_FIFO_1_FREE                             \
+    while ((tft_pio->flevel) & (0x0008 << (pio_sm * 8))) \
+    {                                                    \
+    }
+
+// Wait for FIFO to empty (use before swapping to 8 bits)
+#define WAIT_FOR_FIFO_EMPTY while (!(tft_pio->fstat & (1u << (PIO_FSTAT_TXEMPTY_LSB + pio_sm))))
+
+// The write register of the TX FIFO.
+#define TX_FIFO tft_pio->txf[pio_sm]
+
+// PIO takes control of TFT_DC
+// Must wait for data to flush through before changing DC line
+#define RS_C        \
+    WAIT_FOR_STALL; \
+    tft_pio->sm[pio_sm].instr = pio_instr_clr_dc
+// Flush has happened before this and mode changed back to 16 bit
+#define RS_D tft_pio->sm[pio_sm].instr = pio_instr_set_dc
 
 static constexpr uint16_t touch_xPlateResistance = 241; // Measured resistance between XP and XM
 static constexpr uint16_t touch_zPressureMin = 20;
@@ -22,9 +62,14 @@ static constexpr uint16_t touch_xCoordinateMax = 3400;
 static constexpr uint16_t touch_xCoordinateMin = 400;
 static constexpr uint16_t touch_yCoordinateMax = 3000;
 static constexpr uint16_t touch_yCoordinateMin = 650;
+// PIO runs at sysclk/2, 125MHz, (write cycle of 64ns)
+static constexpr uint32_t pio_clock_int_divider = 4;
+static constexpr uint32_t pio_clock_frac_divider = 0;
 
-struct TouchCoordinate{
-    uint16_t x = 0,y = 0,z = 0;
+
+struct TouchCoordinate
+{
+    uint16_t x = 0, y = 0, z = 0;
 };
 
 /**
@@ -53,15 +98,62 @@ public:
     void setWindow(int32_t x0, int32_t y0, int32_t x1, int32_t y1);
     uint16_t create565Color(uint8_t r, uint8_t g, uint8_t b);
     void fillScreen(uint16_t color);
+    void pushColors(uint16_t *color, uint32_t len);
     void sampleTouch(TouchCoordinate &tc);
-    __force_inline bool isTouchValid(TouchCoordinate &tc){ return tc.x < touch_xCoordinateMax && tc.x > touch_xCoordinateMin && tc.y < touch_yCoordinateMax && tc.y > touch_yCoordinateMin && tc.z < touch_zPressureMax && tc.z > touch_zPressureMin;}
-private:
-    __force_inline void selectTFT() { gpio_put(pin_cs, 0); }
+    __force_inline void touchToPanelCoordinate(TouchCoordinate &tc)
+    {
+        if (!touch_swapxy)
+        {
+            float x = float(tc.x - touch_xCoordinateMin) / float(touch_xCoordinateMax - touch_xCoordinateMin) * 320.;
+            float y = float(tc.y - touch_yCoordinateMin) / float(touch_yCoordinateMax - touch_yCoordinateMin) * 480.;
+            tc.x = x;
+            tc.y = y;
+        }
+        else
+        {
+            float x = float(tc.x - touch_yCoordinateMin) / float(touch_yCoordinateMax - touch_yCoordinateMin) * 320.;
+            float y = float(tc.y - touch_xCoordinateMin) / float(touch_xCoordinateMax - touch_xCoordinateMin) * 480.;
+            tc.x = x;
+            tc.y = y;
+        }
+    }
+    __force_inline bool isTouchValid(TouchCoordinate &tc) { return touch_swapxy ? tc.x < touch_yCoordinateMax && tc.x > touch_yCoordinateMin &&
+                                                                                      tc.y < touch_xCoordinateMax && tc.y > touch_xCoordinateMin &&
+                                                                                      tc.z < touch_zPressureMax && tc.z > touch_zPressureMin
+                                                                                : tc.x < touch_xCoordinateMax && tc.x > touch_xCoordinateMin &&
+                                                                                      tc.y < touch_yCoordinateMax && tc.y > touch_yCoordinateMin &&
+                                                                                      tc.z < touch_zPressureMax && tc.z > touch_zPressureMin; }
+    __force_inline void selectTFT()
+    {
+        WAIT_FOR_STALL;
+        gpio_put(pin_cs, 0);
+    }
     __force_inline void deselectTFT() { gpio_put(pin_cs, 1); }
-    void writeCommand(uint8_t cmd);
-    void writeData(uint8_t data);
-    void putByte(uint8_t data);
-    void writeDataFast(uint8_t data);
+    __force_inline void swapTouchXY(bool swap) { touch_swapxy = swap; }
+
+private:
+    void pioinit(uint16_t clock_div, uint16_t fract_div);
+
+    void pushBlock(uint16_t color, uint32_t len);
+
+    // Community RP2040 board package by Earle Philhower
+    PIO tft_pio = pio0; // Code will try both pio's to find a free SM
+    int8_t pio_sm = 0;  // pioinit will claim a free one
+    // Updated later with the loading offset of the PIO program.
+    uint32_t program_offset = 0;
+
+    // SM stalled mask
+    uint32_t pull_stall_mask = 0;
+
+    // SM jump instructions to change SM behaviour
+    uint32_t pio_instr_jmp8 = 0;
+    uint32_t pio_instr_fill = 0;
+    uint32_t pio_instr_addr = 0;
+
+    // SM "set" instructions to control DC control signal
+    uint32_t pio_instr_set_rs = 0;
+    uint32_t pio_instr_clr_rs = 0;
+
     /**
      * @brief
      * A 8-bit parallel bi-directional data bus for MCU system
@@ -115,6 +207,7 @@ private:
 
     uint8_t xp_adc_channel, ym_adc_channel;
 
+    bool touch_swapxy = false;
     PanelConfig panel_config;
 };
 #endif

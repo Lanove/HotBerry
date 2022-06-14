@@ -141,10 +141,11 @@ static constexpr uint8_t initCommands_bodmer[] =
         CMD_PowerControl1, 2, 0x17,               // VRH1 -- VREG1OUT is 5.00, used for positive gamma
         0x15,                                     // VRH2 -- VREG2OUT is -4.8750, used for negative gamma
         CMD_PowerControl2, 1, 0x41,               // VGH = Vci1x6, VGL = -Vci1 4. Note: To prevent the device damage, please keep VGH – DDVDH < 8V condition.
+        CMD_PowerControl3, 1, 0x44,
         CMD_VCOMControl1, 3, 0x00,                // nVM -- 0 : NV memory is not programmed
         0x12,                                     // VCM_REG [7:0] is used to set factor to generate VCOM voltage from the reference voltage VREG2OUT. -- VCOM = -1.71875
         0x80,                                     // VCM_REG_EN -- 1: VCOM value from VCM_REG [7:0].
-        CMD_FrameRateControl_NormalMode, 1, 0xA0, // Frame rate = 62Hz
+        CMD_FrameRateControl_NormalMode, 1, 0xD0, // Frame rate = 90Hz
         CMD_InterfacePixelFormat, 1, 0x55, // Interface pixel format 16-bit RGB
         CMD_MemoryAccessControl, 1, 0x48, // Portrait
         CMD_PositiveGammaControl, 15, 0x0F, 0x1F, 0x1C, 0x0C, 0x0F, 0x08, 0x48, 0x98, 0x37, 0x0A, 0x13, 0x04, 0x11, 0x0D, 0x00,

@@ -15,6 +15,9 @@
     },
     "files.associations": {
       "resets.h": "c",
-      "adc.h": "c"
+      "adc.h": "c",
+      "array": "cpp",
+      "string": "cpp",
+      "string_view": "cpp"
     },
 }
