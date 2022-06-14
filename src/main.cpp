@@ -138,6 +138,7 @@ int main()
     tft = new ili9486_drivers(tft_dataPins, TFT_RST, TFT_CS, TFT_RS, TFT_WR, TFT_RD, TOUCH_XP, TOUCH_XM, TOUCH_YP, TOUCH_YM, TOUCH_XP_ADC_CHANNEL, TOUCH_YM_ADC_CHANNEL);
     measure_freqs();
     tft->init();
+    tft->dmaInit();
     tft->swapTouchXY(true);
     init_lvgl();
     lv_demo_widgets();
@@ -193,13 +194,12 @@ void lv_display_flush_cb(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t 
 {
     uint32_t w = (area->x2 - area->x1 + 1);
     uint32_t h = (area->y2 - area->y1 + 1);
-
     tft->selectTFT();
     tft->setAddressWindow(area->x1, area->y1, w, h);
-    tft->pushColors((uint16_t *)&color_p->full, w * h);
-    // tft->deselectTFT();
-
+    tft->pushColorsDMA((uint16_t *)&color_p->full, w * h);
+    tft->dmaWait();
     lv_disp_flush_ready(disp);
+    // tft->deselectTFT();
 }
 
 void lv_input_touch_cb(lv_indev_drv_t *indev_driver, lv_indev_data_t *data)

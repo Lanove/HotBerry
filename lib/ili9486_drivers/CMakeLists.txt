@@ -17,6 +17,8 @@ pico_generate_pio_header(ili9486_drivers ${CMAKE_CURRENT_LIST_DIR}/pio_8bit_para
 target_link_libraries(ili9486_drivers
     pico_stdlib
     hardware_adc
-    hardware_pio)
+    hardware_pio
+    hardware_dma
+    )
 
 target_include_directories(ili9486_drivers PUBLIC ./)

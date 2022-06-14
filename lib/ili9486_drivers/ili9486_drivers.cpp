@@ -120,12 +120,12 @@ void ili9486_drivers::init()
             sleep_ms((ms == 255 ? 500 : ms));
         }
     }
-    pioinit(pio_clock_int_divider, pio_clock_frac_divider);
+    pioInit(pio_clock_int_divider, pio_clock_frac_divider);
     fillScreen(0);
     deselectTFT(); // Deselect TFT after PIO idle
 }
 
-void ili9486_drivers::pioinit(uint16_t clock_div, uint16_t fract_div)
+void ili9486_drivers::pioInit(uint16_t clock_div, uint16_t fract_div)
 {
     // Find a free SM on one of the PIO's
     tft_pio = pio0;
@@ -185,6 +185,19 @@ void ili9486_drivers::pioinit(uint16_t clock_div, uint16_t fract_div)
     // Create the instructions to set and clear the RS signal
     pio_instr_set_rs = pio_encode_set((pio_src_dest)0, 1);
     pio_instr_clr_rs = pio_encode_set((pio_src_dest)0, 0);
+}
+
+void ili9486_drivers::dmaInit()
+{
+    dma_tx_channel = dma_claim_unused_channel(false);
+
+    if (dma_tx_channel < 0)
+        return;
+
+    dma_tx_config = dma_channel_get_default_config(dma_tx_channel);
+    channel_config_set_transfer_data_size(&dma_tx_config, DMA_SIZE_16);
+    channel_config_set_dreq(&dma_tx_config, pio_get_dreq(tft_pio, pio_sm, true));
+    dma_used = true;
 }
 
 void ili9486_drivers::pushBlock(uint16_t color, uint32_t len)
@@ -247,9 +260,20 @@ void ili9486_drivers::pushColors(uint16_t *color, uint32_t len)
     }
 }
 
+void ili9486_drivers::pushColorsDMA(uint16_t *colors, uint32_t len)
+{
+    if (!dma_used)
+        return;
+    dmaWait();
+    channel_config_set_bswap(&dma_tx_config, false);
+    dma_channel_configure(dma_tx_channel, &dma_tx_config, &tft_pio->txf[pio_sm], (uint16_t *)colors, len, true);
+}
+
 void ili9486_drivers::sampleTouch(TouchCoordinate &tc)
 {
     // The whole function typically takes 25uS at 250MHz overlocked sysclock (taken with time_us_64())
+    if (dma_used)
+        dmaWait();
     deselectTFT();             // Make sure TFT is not selected before sampling the touchscreen
     uint16_t samples[2] = {0}; // X and Y is sampled twice
     gpio_set_dir(pin_yp, GPIO_OUT);

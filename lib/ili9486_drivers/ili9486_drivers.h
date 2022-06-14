@@ -16,6 +16,7 @@
 #include "ili9486_commands.h"
 #include "pio_8bit_parallel.pio.h"
 #include "hardware/pio.h"
+#include "hardware/dma.h"
 
 // Wait for the PIO to stall (SM pull request finds no data in TX FIFO)
 // This is used to detect when the SM is idle and hence ready for a jump instruction
@@ -98,6 +99,7 @@ public:
     uint16_t create565Color(uint8_t r, uint8_t g, uint8_t b);
     void fillScreen(uint16_t color);
     void pushColors(uint16_t *color, uint32_t len);
+    void pushColorsDMA(uint16_t *colors, uint32_t len);
     void sampleTouch(TouchCoordinate &tc);
     __force_inline void touchToPanelCoordinate(TouchCoordinate &tc)
     {
@@ -133,10 +135,12 @@ public:
         gpio_put(pin_cs, 1);
     }
     __force_inline void swapTouchXY(bool swap) { touch_swapxy = swap; }
+    void dmaInit();
+    __force_inline bool dmaBusy() { return dma_channel_is_busy(dma_tx_channel); };
+    __force_inline void dmaWait() { dma_channel_wait_for_finish_blocking(dma_tx_channel); };
 
 private:
-    void pioinit(uint16_t clock_div, uint16_t fract_div);
-
+    void pioInit(uint16_t clock_div, uint16_t fract_div);
     void pushBlock(uint16_t color, uint32_t len);
 
     // Community RP2040 board package by Earle Philhower
@@ -212,5 +216,9 @@ private:
 
     bool touch_swapxy = false;
     PanelConfig panel_config;
+
+    int32_t dma_tx_channel;
+    dma_channel_config dma_tx_config;
+    bool dma_used;
 };
 #endif
