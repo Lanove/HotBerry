@@ -141,7 +141,6 @@ void ili9486_drivers::pioInit(uint16_t clock_div, uint16_t fract_div)
     // Associate pins with the PIO
     pio_gpio_init(tft_pio, pin_rs);
     pio_gpio_init(tft_pio, pin_wr);
-
     for (int i = 0; i < bits; i++)
         pio_gpio_init(tft_pio, pins_data[0] + i);
 
