@@ -11,12 +11,15 @@
 
 #ifndef _ILI9486_DRIVERS_H_
 #define _ILI9486_DRIVERS_H_
-
+#include <stdio.h>
+#include <string.h>
 #include "pico/stdlib.h"
 #include "ili9486_commands.h"
 #include "pio_8bit_parallel.pio.h"
 #include "hardware/pio.h"
 #include "hardware/dma.h"
+#include "hardware/adc.h"
+#include "hardware/irq.h"
 
 // Wait for the PIO to stall (SM pull request finds no data in TX FIFO)
 // This is used to detect when the SM is idle and hence ready for a jump instruction
@@ -135,9 +138,10 @@ public:
         gpio_put(pin_cs, 1);
     }
     __force_inline void swapTouchXY(bool swap) { touch_swapxy = swap; }
-    void dmaInit();
+    void dmaInit(void (*onComplete_cb)(void));
     __force_inline bool dmaBusy() { return dma_channel_is_busy(dma_tx_channel); };
     __force_inline void dmaWait() { dma_channel_wait_for_finish_blocking(dma_tx_channel); };
+    __force_inline void dmaClearIRQ() { dma_hw->ints0 = 1u << dma_tx_channel; }
 
 private:
     void pioInit(uint16_t clock_div, uint16_t fract_div);

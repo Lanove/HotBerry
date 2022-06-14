@@ -122,6 +122,7 @@ void init_lvgl();
 void lv_display_flush_cb(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p);
 void lv_input_touch_cb(lv_indev_drv_t *indev_driver, lv_indev_data_t *data);
 bool lv_tick_inc_cb(struct repeating_timer *t);
+void lv_dma_onComplete_cb();
 
 int main()
 {
@@ -138,7 +139,7 @@ int main()
     tft = new ili9486_drivers(tft_dataPins, TFT_RST, TFT_CS, TFT_RS, TFT_WR, TFT_RD, TOUCH_XP, TOUCH_XM, TOUCH_YP, TOUCH_YM, TOUCH_XP_ADC_CHANNEL, TOUCH_YM_ADC_CHANNEL);
     measure_freqs();
     tft->init();
-    tft->dmaInit();
+    tft->dmaInit(lv_dma_onComplete_cb);
     tft->swapTouchXY(true);
     init_lvgl();
     lv_demo_widgets();
@@ -152,6 +153,7 @@ int main()
     return 0;
 }
 
+static lv_disp_drv_t disp_drv;
 void init_lvgl()
 {
     lv_init();
@@ -167,7 +169,6 @@ void init_lvgl()
     lv_disp_draw_buf_init(&disp_buf, buf, buf2, displayBufferSize);
 
     /*Initialize the display*/
-    static lv_disp_drv_t disp_drv;
     lv_disp_drv_init(&disp_drv);
     /*Change the following line to your display resolution*/
     disp_drv.hor_res = 320;
@@ -194,12 +195,18 @@ void lv_display_flush_cb(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t 
 {
     uint32_t w = (area->x2 - area->x1 + 1);
     uint32_t h = (area->y2 - area->y1 + 1);
-    tft->selectTFT();
-    tft->setAddressWindow(area->x1, area->y1, w, h);
-    tft->pushColorsDMA((uint16_t *)&color_p->full, w * h);
-    tft->dmaWait();
-    lv_disp_flush_ready(disp);
-    // tft->deselectTFT();
+    if (!tft->dmaBusy())
+    {
+        tft->selectTFT();
+        tft->setAddressWindow(area->x1, area->y1, w, h);
+        tft->pushColorsDMA((uint16_t *)&color_p->full, w * h);
+    }
+}
+
+void lv_dma_onComplete_cb()
+{
+    lv_disp_flush_ready(&disp_drv);
+    tft->dmaClearIRQ();
 }
 
 void lv_input_touch_cb(lv_indev_drv_t *indev_driver, lv_indev_data_t *data)

@@ -18,6 +18,7 @@ target_link_libraries(ili9486_drivers
     pico_stdlib
     hardware_adc
     hardware_pio
+    hardware_irq
     hardware_dma
     )
 
