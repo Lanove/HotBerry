@@ -28,13 +28,8 @@
  */
 ili9486_drivers::ili9486_drivers(uint8_t *_pins_data, uint8_t _pin_rst, uint8_t _pin_cs, uint8_t _pin_rs, uint8_t _pin_wr, uint8_t _pin_rd, uint8_t _pin_xp, uint8_t _pin_xm, uint8_t _pin_yp, uint8_t _pin_ym, uint8_t _xp_adc_channel, uint8_t _ym_adc_channel) : pin_rst(_pin_rst), pin_cs(_pin_cs), pin_rs(_pin_rs), pin_wr(_pin_wr), pin_rd(_pin_rd), pin_xp(_pin_xp), pin_xm(_pin_xm), pin_yp(_pin_yp), pin_ym(_pin_ym), xp_adc_channel(_xp_adc_channel), ym_adc_channel(_ym_adc_channel)
 {
-    // Copy and initialize data pins
+    // Store data pins array internally
     memcpy(pins_data, _pins_data, sizeof(uint8_t) * 8);
-    for (int i = 0; i < 8; i++)
-    {
-        gpio_init(pins_data[i]);
-        gpio_set_dir(pins_data[i], GPIO_OUT);
-    }
 
     // Initialize touch pins
     adc_init();
@@ -43,30 +38,20 @@ ili9486_drivers::ili9486_drivers(uint8_t *_pins_data, uint8_t _pin_rst, uint8_t 
     gpio_init(pin_yp);
     gpio_init(pin_ym);
 
-    // Initialize control pins
+    // Initialize control pins (wr and rs handled by PIO init)
     gpio_init(pin_cs);
-    gpio_init(pin_rs);
     gpio_init(pin_rst);
-    gpio_init(pin_wr);
     gpio_init(pin_rd);
     gpio_set_dir(pin_cs, GPIO_OUT);
-    gpio_set_dir(pin_rs, GPIO_OUT);
     gpio_set_dir(pin_rst, GPIO_OUT);
-    gpio_set_dir(pin_wr, GPIO_OUT);
     gpio_set_dir(pin_rd, GPIO_OUT);
     gpio_put(pin_cs, 1);
     gpio_put(pin_rst, 1);
-    gpio_put(pin_wr, 1);
     gpio_put(pin_rd, 1);
-
-    // GPIO mask for data pins
-    for (int i = 0; i < 8; i++)
-        data_mask |= 1 << pins_data[i];
 }
 
 /**
     Initialize panel, must be called before calling any draw functions
-    Rotation must be set or specified before init called, rotation is PORTRAIT by default
  */
 void ili9486_drivers::init()
 {
@@ -77,10 +62,9 @@ void ili9486_drivers::init()
     sleep_us(15); // Reset pulse duration minimal 10uS
     gpio_put(pin_rst, 1);
     sleep_ms(120); // It is necessary to wait 5msec after releasing RESX before sending commands. Also Sleep Out command cannot be sent for 120msec.
-
+    pioInit(pio_clock_int_divider, pio_clock_frac_divider);
     const uint8_t *initCommand_ptr = initCommands; // Load init command used
-    gpio_put(pin_cs, 0);                           // Select TFT manually
-
+    selectTFT();
     for (;;) // For each command...
     {
         uint8_t cmd = *initCommand_ptr++; // Command instruction byte
@@ -103,7 +87,6 @@ void ili9486_drivers::init()
             sleep_ms((ms == 255 ? 500 : ms));
         }
     }
-    pioInit(pio_clock_int_divider, pio_clock_frac_divider);
     fillScreen(0); // Fill screen with black at init
     deselectTFT(); // Deselect TFT after PIO finishes transfer data from fillScreen()
 }
@@ -115,35 +98,32 @@ void ili9486_drivers::setRotation(Rotations rotation)
 {
     _rot = rotation;
     selectTFT();
-    pio_enterCommandMode();
-    tft_pio->sm[pio_sm].instr = pio_instr_write8;
-    tft_pio->txf[pio_sm] = CMD_MemoryAccessControl;
-    pio_enterDataMode();
-    tft_pio->sm[pio_sm].instr = pio_instr_write8;
+    writeCommand(CMD_MemoryAccessControl);
+
     switch (_rot)
     {
     case PORTRAIT: // Portrait
-        tft_pio->txf[pio_sm] = MASK_BGR | MASK_MX;
+        writeData(MASK_BGR | MASK_MX);
         _width = panel_width;
         _height = panel_height;
         break;
     case LANDSCAPE: // Landscape (Portrait + 90)
-        tft_pio->txf[pio_sm] = MASK_BGR | MASK_MV;
+        writeData(MASK_BGR | MASK_MV);
         _width = panel_height;
         _height = panel_width;
         break;
     case INVERTED_PORTRAIT: // Inverter portrait
-        tft_pio->txf[pio_sm] = MASK_BGR | MASK_MY;
+        writeData(MASK_BGR | MASK_MY);
         _width = panel_width;
         _height = panel_height;
         break;
     case INVERTED_LANDSCAPE: // Inverted landscape
-        tft_pio->txf[pio_sm] = MASK_BGR | MASK_MV | MASK_MX | MASK_MY;
+        writeData(MASK_BGR | MASK_MV | MASK_MX | MASK_MY);
         _width = panel_height;
         _height = panel_width;
         break;
     default: // Portrait
-        tft_pio->txf[pio_sm] = MASK_BGR | MASK_MX;
+        writeData(MASK_BGR | MASK_MX);
         _width = panel_width;
         _height = panel_height;
         break;
@@ -296,20 +276,16 @@ void ili9486_drivers::pushColorsDMA(uint16_t *colors, uint32_t len)
 
 void ili9486_drivers::writeData(uint8_t data)
 {
-    gpio_put(pin_rs, 1); // Write data
-    gpio_put(pin_rd, 1);
-    gpio_put_masked(data_mask, data << 8);
-    gpio_put(pin_wr, 0);
-    gpio_put(pin_wr, 1);
+    pio_enterDataMode();
+    tft_pio->sm[pio_sm].instr = pio_instr_write8;
+    tft_pio->txf[pio_sm] = data;
 }
 
 void ili9486_drivers::writeCommand(uint8_t cmd)
 {
-    gpio_put(pin_rs, 0); // Issue command / write command
-    gpio_put(pin_rd, 1);
-    gpio_put_masked(data_mask, cmd << 8);
-    gpio_put(pin_wr, 0);
-    gpio_put(pin_wr, 1);
+    pio_enterCommandMode();
+    tft_pio->sm[pio_sm].instr = pio_instr_write8;
+    tft_pio->txf[pio_sm] = cmd;
 }
 
 void ili9486_drivers::sampleTouch(TouchCoordinate &tc)
