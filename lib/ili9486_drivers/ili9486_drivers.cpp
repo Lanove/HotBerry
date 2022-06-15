@@ -103,9 +103,6 @@ void ili9486_drivers::init()
             sleep_ms((ms == 255 ? 500 : ms));
         }
     }
-     // Write rotation setting before doing pioinit() 
-     // because writeRotation still uses regular GPIO to write commands and data
-    writeRotation();
     pioInit(pio_clock_int_divider, pio_clock_frac_divider);
     fillScreen(0); // Fill screen with black at init
     deselectTFT(); // Deselect TFT after PIO finishes transfer data from fillScreen()
@@ -113,39 +110,45 @@ void ili9486_drivers::init()
 
 /**
  * Private function to apply rotation setting from _rot to panel, uses regular GPIO function to write commands and data
- * Private because rotation cannot be changed after init, because PIO takes over data transfer after init
  */
-void ili9486_drivers::writeRotation()
+void ili9486_drivers::setRotation(Rotations rotation)
 {
-    writeCommand(CMD_MemoryAccessControl);
+    _rot = rotation;
+    selectTFT();
+    pio_enterCommandMode();
+    tft_pio->sm[pio_sm].instr = pio_instr_write8;
+    tft_pio->txf[pio_sm] = CMD_MemoryAccessControl;
+    pio_enterDataMode();
+    tft_pio->sm[pio_sm].instr = pio_instr_write8;
     switch (_rot)
     {
     case PORTRAIT: // Portrait
-        writeData(MASK_BGR | MASK_MX);
+        tft_pio->txf[pio_sm] = MASK_BGR | MASK_MX;
         _width = panel_width;
         _height = panel_height;
         break;
     case LANDSCAPE: // Landscape (Portrait + 90)
-        writeData(MASK_BGR | MASK_MV);
+        tft_pio->txf[pio_sm] = MASK_BGR | MASK_MV;
         _width = panel_height;
         _height = panel_width;
         break;
     case INVERTED_PORTRAIT: // Inverter portrait
-        writeData(MASK_BGR | MASK_MY);
+        tft_pio->txf[pio_sm] = MASK_BGR | MASK_MY;
         _width = panel_width;
         _height = panel_height;
         break;
     case INVERTED_LANDSCAPE: // Inverted landscape
-        writeData(MASK_BGR | MASK_MV | MASK_MX | MASK_MY);
+        tft_pio->txf[pio_sm] = MASK_BGR | MASK_MV | MASK_MX | MASK_MY;
         _width = panel_height;
         _height = panel_width;
         break;
     default: // Portrait
-        writeData(MASK_BGR | MASK_MX);
+        tft_pio->txf[pio_sm] = MASK_BGR | MASK_MX;
         _width = panel_width;
         _height = panel_height;
         break;
     }
+    deselectTFT();
 }
 
 void ili9486_drivers::pioInit(uint16_t clock_div, uint16_t fract_div)
@@ -202,15 +205,18 @@ void ili9486_drivers::pioInit(uint16_t clock_div, uint16_t fract_div)
     // Create the instructions for the jumps to send routines
     pio_instr_fill = pio_encode_jmp(program_offset + tft_io_offset_block_fill);
     pio_instr_addr = pio_encode_jmp(program_offset + tft_io_offset_set_addr_window);
+    pio_instr_write8 = pio_encode_jmp(program_offset + tft_io_offset_start_8);
+
+    // Create instruction to set and clear the RS signal
+    pio_instr_set_rs = pio_encode_set((pio_src_dest)0, 1);
+    pio_instr_clr_rs = pio_encode_set((pio_src_dest)0, 0);
 }
 
 void ili9486_drivers::dmaInit(void (*onComplete_cb)(void))
 {
     dma_tx_channel = dma_claim_unused_channel(false);
-
     if (dma_tx_channel < 0)
         return;
-
     dma_tx_config = dma_channel_get_default_config(dma_tx_channel);
     channel_config_set_transfer_data_size(&dma_tx_config, DMA_SIZE_16);
     channel_config_set_dreq(&dma_tx_config, pio_get_dreq(tft_pio, pio_sm, true));

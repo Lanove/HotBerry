@@ -102,36 +102,31 @@ public:
     __force_inline uint16_t height() { return _height; }
     /**
      * @brief Set the rotation of the panel
-     * @param rt Rotations enum (choose between PORTRAIT,LANDSCAPE,INVERTED_PORTRAIT or INVERTED_LANDSCAPE)
+     * @param rotation Rotations enum (choose between PORTRAIT,LANDSCAPE,INVERTED_PORTRAIT or INVERTED_LANDSCAPE)
      */
-    __force_inline void setRotation(Rotations rt) { _rot = rt; }
+    void setRotation(Rotations rotation);
     /**
-     * @brief Activate/select TFT from receiving commands/data, will wait either DMA or PIO to finish it's operation before activate/select panel
+     * @brief Activate/select TFT from receiving commands/data, will wait either PIO to finish it's operation before activate/select panel
      */
     __force_inline void selectTFT()
     {
         if (!dma_used)
             pio_waitForStall();
-        else
-            dmaWait();
         gpio_put(pin_cs, 0);
     }
     /**
-     * @brief Deactivate/deselect TFT from receiving commands/data, will wait either DMA or PIO to finish it's operation before deactivate/deselect panel
+     * @brief Deactivate/deselect TFT from receiving commands/data, will wait either PIO to finish it's operation before deactivate/deselect panel
      */
     __force_inline void deselectTFT()
     {
         if (!dma_used)
             pio_waitForStall();
-        else
-            dmaWait();
         gpio_put(pin_cs, 1);
     }
 
 private:
     void pioInit(uint16_t clock_div, uint16_t fract_div);
     void pushBlock(uint16_t color, uint32_t len);
-    void writeRotation();
     void writeData(uint8_t data);
     void writeCommand(uint8_t cmd);
 
