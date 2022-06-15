@@ -1,29 +1,8 @@
 #ifndef _ILI9486_COMMANDS_H_
 #define _ILI9486_COMMANDS_H_
-/**
- * This command is an empty command; it does not have any effect on ILI9486L. However it can be used to terminate Frame
- * Memory Write or Read as described in RAMWR (Memory Write) and RAMRD (Memory Read) Commands.
- * X = Don’t care
- */
+
 static constexpr uint8_t CMD_NOP = 0x00;
-/**
- * When the Software Reset command is written, it causes software reset. It resets the commands and parameters to their
- * S/W Reset default values. (See default tables in each command description.)
- * The display is blank immediately
- * Note: The Frame Memory contents is kept or not by this command.
- * It will be necessary to wait 5msec before sending new command following software reset. The display module loads all
- * display supplier factory default values to the registers during this 5msec. If Software Reset is applied during Sleep Out
- * mode, it will be necessary to wait 120msec before sending Sleep out command. Software Reset Command cannot be sent
- * during Sleep Out sequence.
- */
 static constexpr uint8_t CMD_SoftReset = 0x01;
-/**
- * This read byte returns 24 bits display identification information.
- * The 1st parameter is dummy data.
- * The 2nd parameter (ID1 [7:0]): LCD module’s manufacturer ID.
- * The 3rd parameter (ID2 [7:0]): LCD module/driver version ID.
- * The 4th parameter (ID3 [7:0]): LCD module/driver ID.
- */
 static constexpr uint8_t CMD_ReadID = 0x04;
 static constexpr uint8_t CMD_ReadDSIError = 0x05;
 static constexpr uint8_t CMD_ReadDisplayStatus = 0x09;
@@ -113,76 +92,21 @@ static constexpr uint8_t CMD_DisplayGammaControl2 = 0xE3;
 static constexpr uint8_t CMD_SPIReadCommandSetting = 0xFB;
 static constexpr uint8_t CMD_Delay = 0x80;
 
-static constexpr uint8_t initCommands_lovyan[] =
+static constexpr uint8_t initCommands[] =
     {
-        CMD_SoftReset, 2, 0x17,                   // VRH1 -- VREG1OUT is 5.00, used for positive gamma
-        0x15,                                     // VRH2 -- VREG2OUT is -4.8750, used for negative gamma
-        CMD_PowerControl2, 1, 0x41,               // VGH = Vci1x6, VGL = -Vci1 4. Note: To prevent the device damage, please keep VGH – DDVDH < 8V condition.
-        CMD_VCOMControl1, 3, 0x00,                // nVM -- 0 : NV memory is not programmed
-        0x12,                                     // VCM_REG [7:0] is used to set factor to generate VCOM voltage from the reference voltage VREG2OUT. -- VCOM = -1.71875
-        0x80,                                     // VCM_REG_EN -- 1: VCOM value from VCM_REG [7:0].
-        CMD_FrameRateControl_NormalMode, 1, 0xA0, // Frame rate = 62Hz
-        CMD_DisplayInversionControl, 1, 0x02,     // Display Inversion Control = 2dot inversion
-        CMD_DisplayFunctionControl, 3, 0x02,      // Nomal scan
-        0x22,                                     // 5 frames
-        0x3B,                                     // LCD Drive Line : 480
-        CMD_EntryModeSet, 1, 0xC6,                //
-                                                  //   CMD_ADJCTL3, 4, 0xA9,  // Adjust Control 3 ????
-                                                  //   0x51,
-                                                  //   0x2C,
-                                                  //   0x82,
-
-        CMD_PositiveGammaControl, 15, 0x0F, 0x1F, 0x1C, 0x0C, 0x0F, 0x08, 0x48, 0x98,
-        0x37, 0x0A, 0x13, 0x04, 0x11, 0x0D, 0x00,
-
-        CMD_NegativeGammaControl, 15, 0x0F, 0x32, 0x2E, 0x0B, 0x0D, 0x05, 0x47, 0x75,
-        0x37, 0x06, 0x10, 0x03, 0x24, 0x20, 0x00,
-
-        CMD_SleepOut, 0 + CMD_Delay, 120, // Exit sleep mode It will be necessary to wait 5msec before sending next command; this is to allow time for the supply voltages and clock circuits to stabilize
-        CMD_IdleModeOff, 0,
-        CMD_DisplayOn, 0 + CMD_Delay, 100,
-        0xFF, 0xFF, // end
-};
-
-static constexpr uint8_t initCommands_bodmer_lovyan[] =
-    {
-        CMD_PowerControl1, 2, 0x17, // VRH1 -- VREG1OUT is 5.00, used for positive gamma
-        0x15,                       // VRH2 -- VREG2OUT is -4.8750, used for negative gamma
-        CMD_PowerControl2, 1, 0x41, // VGH = Vci1x6, VGL = -Vci1 4. Note: To prevent the device damage, please keep VGH – DDVDH < 8V condition.
-        CMD_PowerControl3, 1, 0x44,
-        CMD_VCOMControl1, 3, 0x00,                // nVM -- 0 : NV memory is not programmed
-        0x12,                                     // VCM_REG [7:0] is used to set factor to generate VCOM voltage from the reference voltage VREG2OUT. -- VCOM = -1.71875
-        0x80,                                     // VCM_REG_EN -- 1: VCOM value from VCM_REG [7:0].
-        CMD_FrameRateControl_NormalMode, 1, 0xD0, // Frame rate = 90Hz
-        CMD_InterfacePixelFormat, 1, 0x55,        // Interface pixel format 16-bit RGB
-        CMD_MemoryAccessControl, 1, 0x48,         // Portrait
-        CMD_PositiveGammaControl, 15, 0x0F, 0x1F, 0x1C, 0x0C, 0x0F, 0x08, 0x48, 0x98, 0x37, 0x0A, 0x13, 0x04, 0x11, 0x0D, 0x00,
-        CMD_NegativeGammaControl, 15, 0x0F, 0x32, 0x2E, 0x0B, 0x0D, 0x05, 0x47, 0x75, 0x37, 0x06, 0x10, 0x03, 0x24, 0x20, 0x00,
-        CMD_SleepOut, 0 + CMD_Delay, 120, // Exit sleep mode It will be necessary to wait 5msec before sending next command; this is to allow time for the supply voltages and clock circuits to stabilize
-        CMD_IdleModeOff, 0,
-        CMD_DisplayOn, 0 + CMD_Delay, 100,
-        0xFF, 0xFF, // end
-};
-
-static constexpr uint8_t initCommands_bodmer[] =
-    {
-        CMD_SoftReset, 0 + CMD_Delay, 120,
         CMD_SleepOut, 0 + CMD_Delay, 120,
         CMD_InterfacePixelFormat, 1, 0x55,
         CMD_FrameRateControl_NormalMode, 2, 0xF0, 0x15,
-        CMD_PowerControl1, 2, 0x17, // VRH1 -- VREG1OUT is 5.00, used for positive gamma
-        0x15,                       // VRH2 -- VREG2OUT is -4.8750, used for negative gamma
-        CMD_PowerControl2, 1, 0x41, // VGH = Vci1x6, VGL = -Vci1 4. Note: To prevent the device damage, please keep VGH – DDVDH < 8V condition.
+        CMD_PowerControl1, 2, 0x17,0x15,
+        CMD_PowerControl2, 1, 0x41,
         CMD_PowerControl3, 1, 0x44,
-        CMD_VCOMControl1, 3, 0x00, // nVM -- 0 : NV memory is not programmed
-        0x12,                      // VCM_REG [7:0] is used to set factor to generate VCOM voltage from the reference voltage VREG2OUT. -- VCOM = -1.71875
-        0x80,                      // VCM_REG_EN -- 1: VCOM value from VCM_REG [7:0].
+        CMD_VCOMControl1, 3, 0x00,0x12,0x80,
         CMD_PositiveGammaControl, 15, 0x0F, 0x1F, 0x1C, 0x0C, 0x0F, 0x08, 0x48, 0x98, 0x37, 0x0A, 0x13, 0x04, 0x11, 0x0D, 0x00,
         CMD_NegativeGammaControl, 15, 0x0F, 0x32, 0x2E, 0x0B, 0x0D, 0x05, 0x47, 0x75, 0x37, 0x06, 0x10, 0x03, 0x24, 0x20, 0x00,
         CMD_DisplayInversionOff, 0,
         CMD_MemoryAccessControl, 1, 0x48,
         CMD_DisplayOn, 0 + CMD_Delay, 150,
-        0xFF, 0xFF, // end
+        0xFF, 0xFF // end
 };
 
 #endif

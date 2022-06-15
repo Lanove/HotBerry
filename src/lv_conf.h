@@ -709,14 +709,14 @@
 /*Show some widget. It might be required to increase `LV_MEM_SIZE` */
 #define LV_USE_DEMO_WIDGETS        1
 #if LV_USE_DEMO_WIDGETS
-#define LV_DEMO_WIDGETS_SLIDESHOW  1
+#define LV_DEMO_WIDGETS_SLIDESHOW  0
 #endif
 
 /*Demonstrate the usage of encoder and keyboard*/
 #define LV_USE_DEMO_KEYPAD_AND_ENCODER     0
 
 /*Benchmark your system*/
-#define LV_USE_DEMO_BENCHMARK   1
+#define LV_USE_DEMO_BENCHMARK   0
 
 /*Stress test for LVGL*/
 #define LV_USE_DEMO_STRESS      0
@@ -728,7 +728,7 @@
 # define LV_DEMO_MUSIC_LANDSCAPE    0
 # define LV_DEMO_MUSIC_ROUND        0
 # define LV_DEMO_MUSIC_LARGE        0
-# define LV_DEMO_MUSIC_AUTO_PLAY    0
+# define LV_DEMO_MUSIC_AUTO_PLAY    1
 #endif
 
 /*--END OF LV_CONF_H--*/

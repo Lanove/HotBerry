@@ -21,85 +21,42 @@
 #include "hardware/adc.h"
 #include "hardware/irq.h"
 
-// Wait for the PIO to stall (SM pull request finds no data in TX FIFO)
-// This is used to detect when the SM is idle and hence ready for a jump instruction
-#define WAIT_FOR_STALL                 \
-    tft_pio->fdebug = pull_stall_mask; \
-    while (!(tft_pio->fdebug & pull_stall_mask))
-
-// Wait until at least "S" locations free
-#define WAIT_FOR_FIFO_FREE(S)                                      \
-    while (((tft_pio->flevel >> (pio_sm * 8)) & 0x000F) > (8 - S)) \
-    {                                                              \
-    }
-
-// Wait until at least 5 locations free
-#define WAIT_FOR_FIFO_5_FREE                             \
-    while ((tft_pio->flevel) & (0x000c << (pio_sm * 8))) \
-    {                                                    \
-    }
-
-// Wait until at least 1 location free
-#define WAIT_FOR_FIFO_1_FREE                             \
-    while ((tft_pio->flevel) & (0x0008 << (pio_sm * 8))) \
-    {                                                    \
-    }
-
-// Wait for FIFO to empty (use before swapping to 8 bits)
-#define WAIT_FOR_FIFO_EMPTY while (!(tft_pio->fstat & (1u << (PIO_FSTAT_TXEMPTY_LSB + pio_sm))))
-
-// The write register of the TX FIFO.
-#define TX_FIFO tft_pio->txf[pio_sm]
-
-// PIO takes control of TFT_DC
-// Must wait for data to flush through before changing DC line
-#define RS_C        \
-    WAIT_FOR_STALL; \
-    tft_pio->sm[pio_sm].instr = pio_instr_clr_dc
-// Flush has happened before this and mode changed back to 16 bit
-#define RS_D tft_pio->sm[pio_sm].instr = pio_instr_set_dc
-
+// Touch parameters
 static constexpr uint16_t touch_xPlateResistance = 241; // Measured resistance between XP and XM
 static constexpr uint16_t touch_zPressureMin = 20;
 static constexpr uint16_t touch_zPressureMax = 1400;
-static constexpr uint16_t touch_xCoordinateMax = 3560;
-static constexpr uint16_t touch_xCoordinateMin = 370;
-static constexpr uint16_t touch_yCoordinateMax = 3270;
-static constexpr uint16_t touch_yCoordinateMin = 720;
-// PIO runs at sysclk/2, 125MHz, (write cycle of 64ns)
-static constexpr uint32_t pio_clock_int_divider = 2;
-static constexpr uint32_t pio_clock_frac_divider = 0;
+static constexpr uint16_t touch_xADCMax = 3560;
+static constexpr uint16_t touch_xADCMin = 370;
+static constexpr uint16_t touch_yADCMax = 3270;
+static constexpr uint16_t touch_yADCMin = 720;
+
+// PIO Clock dividers
+static constexpr uint32_t pio_clock_int_divider = 2;  // PIO runs at sysclk/2, 125MHz, (write cycle of 64ns)
+static constexpr uint32_t pio_clock_frac_divider = 0; // PIO runs at sysclk/2, 125MHz, (write cycle of 64ns)
+
+// Panel parameters
 static constexpr uint16_t panel_width = 320;
 static constexpr uint16_t panel_height = 480;
 
-enum Rotations{
+/**
+ * @brief
+ * Panel rotations enum
+ */
+enum Rotations
+{
     PORTRAIT,
     LANDSCAPE,
     INVERTED_PORTRAIT,
     INVERTED_LANDSCAPE
 };
 
+/**
+ * @brief Struct used to store touch coordinate and status
+ */
 struct TouchCoordinate
 {
     uint16_t x = 0, y = 0, z = 0;
     bool touched;
-};
-
-/**
- * @brief
- * Struct that store width,height and rotation of the panel
- */
-struct PanelConfig
-{
-    int16_t width, height;
-    uint8_t rotation;
-};
-
-struct rgb565_t
-{
-    uint8_t r : 5;
-    uint8_t g : 6;
-    uint8_t b : 5;
 };
 
 class ili9486_drivers
@@ -114,23 +71,63 @@ public:
     void pushColors(uint16_t *color, uint32_t len);
     void pushColorsDMA(uint16_t *colors, uint32_t len);
     void sampleTouch(TouchCoordinate &tc);
-    __force_inline void setRotation(Rotations rt){_rot = rt;}
+    void dmaInit(void (*onComplete_cb)(void));
+    /**
+     * @brief
+     * Check if DMA is still busy sending data, true if DMA is busy
+     * @return bool
+     */
+    __force_inline bool dmaBusy() { return dma_channel_is_busy(dma_tx_channel); };
+    /**
+     * @brief
+     * Wait for DMA to finish it's data transfer (blocking)
+     */
+    __force_inline void dmaWait() { dma_channel_wait_for_finish_blocking(dma_tx_channel); };
+    /**
+     * @brief
+     * Clear DMA Interrupt Request (Must be called on onComplete_cb ISR from dmaInit())
+     */
+    __force_inline void dmaClearIRQ() { dma_hw->ints0 = 1u << dma_tx_channel; }
+    /**
+     * @brief
+     * Get panel width (vary between 320 or 480 according to panel rotation)
+     * @return uint16_t
+     */
+    __force_inline uint16_t width() { return _width; }
+    /**
+     * @brief
+     * Get panel height (vary between 320 or 480 according to panel rotation)
+     * @return uint16_t
+     */
+    __force_inline uint16_t height() { return _height; }
+    /**
+     * @brief Set the rotation of the panel
+     * @param rt Rotations enum (choose between PORTRAIT,LANDSCAPE,INVERTED_PORTRAIT or INVERTED_LANDSCAPE)
+     */
+    __force_inline void setRotation(Rotations rt) { _rot = rt; }
+    /**
+     * @brief Activate/select TFT from receiving commands/data, will wait either DMA or PIO to finish it's operation before activate/select panel
+     */
     __force_inline void selectTFT()
     {
-        if(!dma_used) WAIT_FOR_STALL;
+        if (!dma_used)
+            pio_waitForStall();
+        else
+            dmaWait();
         gpio_put(pin_cs, 0);
     }
+    /**
+     * @brief Deactivate/deselect TFT from receiving commands/data, will wait either DMA or PIO to finish it's operation before deactivate/deselect panel
+     */
     __force_inline void deselectTFT()
     {
-        if(!dma_used) WAIT_FOR_STALL;
+        if (!dma_used)
+            pio_waitForStall();
+        else
+            dmaWait();
         gpio_put(pin_cs, 1);
     }
-    void dmaInit(void (*onComplete_cb)(void));
-    __force_inline bool dmaBusy() { return dma_channel_is_busy(dma_tx_channel); };
-    __force_inline void dmaWait() { dma_channel_wait_for_finish_blocking(dma_tx_channel); };
-    __force_inline void dmaClearIRQ() { dma_hw->ints0 = 1u << dma_tx_channel; }
-    __force_inline uint16_t width(){ return _width;}
-    __force_inline uint16_t height(){ return _height;}
+
 private:
     void pioInit(uint16_t clock_div, uint16_t fract_div);
     void pushBlock(uint16_t color, uint32_t len);
@@ -138,85 +135,97 @@ private:
     void writeData(uint8_t data);
     void writeCommand(uint8_t cmd);
 
-    // Community RP2040 board package by Earle Philhower
-    PIO tft_pio = pio0; // Code will try both pio's to find a free SM
-    int8_t pio_sm = 0;  // pioinit will claim a free one
-    // Updated later with the loading offset of the PIO program.
+    /**
+     * @brief Wait until at least "count" number of FIFO is empty
+     * @param count Number of FIFO
+     */
+    __force_inline void pio_waitForFreeFIFO(size_t count)
+    {
+        while (((tft_pio->flevel >> (pio_sm * 8)) & 0x000F) > (8 - count))
+            ;
+    }
+
+    /**
+     * @brief Wait for the PIO to stall (SM pull request finds no data in TX FIFO). This is used to detect when the SM is idle and hence ready for a jump instruction
+     */
+    __force_inline void pio_waitForStall()
+    {
+        tft_pio->fdebug = pull_stall_mask;
+        while (!(tft_pio->fdebug & pull_stall_mask))
+            ;
+    }
+
+    __force_inline void pio_enterCommandMode()
+    {
+        pio_waitForStall();
+        tft_pio->sm[pio_sm].instr = pio_instr_clr_rs;
+    }
+    __force_inline void pio_enterDataMode()
+    {
+        pio_waitForStall();
+        tft_pio->sm[pio_sm].instr = pio_instr_set_rs;
+    }
+
+    /// Panel rotation variable
+    Rotations _rot = PORTRAIT;
+    /// Panel width variable
+    uint16_t _width = 0;
+    /// Panel height variable
+    uint16_t _height = 0;
+
+    /// A 8-bit parallel bi-directional data bus for MCU system
+    /// Data setup and hold is 10ns
+    uint8_t pins_data[8];
+    // GPIO data mask
+    uint32_t data_mask = 0;
+
+    /// Low: the LCD is selected and accessible
+    /// High: the LCD is not selected and not accessible
+    uint8_t pin_cs;
+
+    /// The signal for command or parameter select. LCD bus command / data selection signal.
+    /// Low: Command.
+    /// High: Parameter/Data.
+    uint8_t pin_rs;
+
+    /// Initializes the chip with a low input. Be sure to execute a power-on reset after supplying power.
+    /// Apply low signal longer than 10uS to reset the display
+    uint8_t pin_rst;
+
+    /// Serves as a write signal and writes data at the rising edge.
+    uint8_t pin_wr;
+
+    /// Serves as a read signal and read data at the rising edge.
+    uint8_t pin_rd;
+
+    /// Resistive touch pins
+    uint8_t pin_xm, pin_xp, pin_yp, pin_ym;
+
+    /// ADC channel used for touch ADC
+    uint8_t xp_adc_channel, ym_adc_channel;
+
+    // pioinit() will try both pio's to find a free SM
+    PIO tft_pio = pio0;
+    // pioinit() will claim free state machine available
+    int8_t pio_sm = 0;
+    // Updated later on pioinit() with the loading offset of the PIO program.
     uint32_t program_offset = 0;
-
-    // SM stalled mask
+    // PIO state machine stalled mask
     uint32_t pull_stall_mask = 0;
-
     // SM jump instructions to change SM behaviour
-    uint32_t pio_instr_jmp8 = 0;
-    uint32_t pio_instr_fill = 0;
-    uint32_t pio_instr_addr = 0;
+    uint32_t pio_instr_fill = 0; // Block fill instruction offset
+    uint32_t pio_instr_addr = 0; // Set window address instruction offset
+    uint32_t pio_instr_write8 = 0;
 
-    // SM "set" instructions to control DC control signal
+    // SM "set" instructions to control RS control signal
     uint32_t pio_instr_set_rs = 0;
     uint32_t pio_instr_clr_rs = 0;
 
-    /**
-     * @brief
-     * A 8-bit parallel bi-directional data bus for MCU system
-     * Data setup and hold is 10ns
-     */
-    uint8_t pins_data[8];
-    uint32_t data_mask = 0;
-
-    /**
-     * Low: the chip is selected and accessible
-     * High: the chip is not selected and not accessible
-     * Chip Select setup time (Write) 15 ns
-     * Chip Select setup time (Read ID) 45 ns
-     * Chip Select setup time (Read FM) 355 ns
-     */
-    uint8_t pin_cs;
-
-    /**
-     * Parallel interface (D/CX (RS)): The signal for command or
-     * parameter select. LCD bus command / data selection signal.
-     * Low: Command.
-     * High: Parameter/Data.
-     */
-    uint8_t pin_rs;
-
-    /**
-    - Initializes the chip with a low input. Be sure to execute a
-    power-on reset after supplying power.
-    Apply signal longer than 10uS to reset the display
-    */
-    uint8_t pin_rst;
-
-    /**
-    - 8080 system (WRX): Serves as a write signal and writes data
-    at the rising edge.
-    Write cycle 50ns (max 20MHz)
-    */
-    uint8_t pin_wr;
-
-    /**
-    - 8080 system (RDX): Serves as a read signal and read data at
-    the rising edge.
-    */
-    uint8_t pin_rd;
-
-    /**
-     * @brief
-     * Resistive touch pins
-     */
-    uint8_t pin_xm, pin_xp, pin_yp, pin_ym;
-
-    uint8_t xp_adc_channel, ym_adc_channel;
-
-    bool touch_swapxy = false;
-    PanelConfig panel_config;
-
+    /// dmaInit() will claim free DMA channel available
     int32_t dma_tx_channel;
+    /// Used to store used DMA channel configs
     dma_channel_config dma_tx_config;
+    /// Flag if DMA is used or not, true if DMA is used
     bool dma_used;
-    Rotations _rot = PORTRAIT;
-    uint16_t _width = 0;
-    uint16_t _height = 0;
 };
 #endif

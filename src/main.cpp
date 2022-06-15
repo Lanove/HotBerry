@@ -137,7 +137,7 @@ int main()
         printf("system clock now %dMHz\n", freq_mhz);
     measure_freqs();
     tft = new ili9486_drivers(tft_dataPins, TFT_RST, TFT_CS, TFT_RS, TFT_WR, TFT_RD, TOUCH_XP, TOUCH_XM, TOUCH_YP, TOUCH_YM, TOUCH_XP_ADC_CHANNEL, TOUCH_YM_ADC_CHANNEL);
-    tft->setRotation(LANDSCAPE);
+    tft->setRotation(INVERTED_LANDSCAPE);
     tft->init();
     tft->dmaInit(lv_dma_onComplete_cb);
     init_lvgl();
@@ -194,12 +194,13 @@ void lv_display_flush_cb(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t 
 {
     uint32_t w = (area->x2 - area->x1 + 1);
     uint32_t h = (area->y2 - area->y1 + 1);
-    if (!tft->dmaBusy())
-    {
-        tft->selectTFT();
-        tft->setAddressWindow(area->x1, area->y1, w, h);
-        tft->pushColorsDMA((uint16_t *)&color_p->full, w * h);
-    }
+    // if (!tft->dmaBusy())
+    // {
+    tft->selectTFT();
+    tft->setAddressWindow(area->x1, area->y1, w, h);
+    tft->pushColors((uint16_t *)&color_p->full, w * h);
+    lv_disp_flush_ready(&disp_drv);
+    // }
 }
 
 void lv_dma_onComplete_cb()

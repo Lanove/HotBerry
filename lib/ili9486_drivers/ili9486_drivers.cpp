@@ -11,22 +11,24 @@
 #include "ili9486_drivers.h"
 
 /**
+ * @brief Construct a new ili9486 drivers::ili9486 drivers object
  *
- * @brief Construct a new ili9486 drivers object
- *
- * @param _pins_data a pointer to 8 size of uint8_t that correspond to D0~D7 pins of the panel (pointer content is copied by the class)
+ * @param _pins_data An array 8 size of uint8_t that correspond to D0~D7 pins of the panel, D0 to D7 must be sequentially incremental (ex GPIO0 to GPIO7)
  * @param _pin_rst Reset pin of the panel
  * @param _pin_cs Chip Select pin of the panel
  * @param _pin_rs Command/Data pin of the panel
  * @param _pin_wr Write Data Signal of the panel
  * @param _pin_rd Read Data Signal of the panel
- * @param _pin_xp X positive pin of the resistive touchscreen
+ * @param _pin_xp X positive pin of the resistive touchscreen (Must be analog pin)
  * @param _pin_xm X negative pin of the resistive touchscreen
  * @param _pin_yp Y positive pin of the resistive touchscreen
- * @param _pin_ym Y negative pin of the resistive touchscreen
+ * @param _pin_ym Y negative pin of the resistive touchscreen (Must be analog pin)
+ * @param _xp_adc_channel X positive ADC channel
+ * @param _ym_adc_channel Y negative ADC channel
  */
 ili9486_drivers::ili9486_drivers(uint8_t *_pins_data, uint8_t _pin_rst, uint8_t _pin_cs, uint8_t _pin_rs, uint8_t _pin_wr, uint8_t _pin_rd, uint8_t _pin_xp, uint8_t _pin_xm, uint8_t _pin_yp, uint8_t _pin_ym, uint8_t _xp_adc_channel, uint8_t _ym_adc_channel) : pin_rst(_pin_rst), pin_cs(_pin_cs), pin_rs(_pin_rs), pin_wr(_pin_wr), pin_rd(_pin_rd), pin_xp(_pin_xp), pin_xm(_pin_xm), pin_yp(_pin_yp), pin_ym(_pin_ym), xp_adc_channel(_xp_adc_channel), ym_adc_channel(_ym_adc_channel)
 {
+    // Copy and initialize data pins
     memcpy(pins_data, _pins_data, sizeof(uint8_t) * 8);
     for (int i = 0; i < 8; i++)
     {
@@ -34,70 +36,85 @@ ili9486_drivers::ili9486_drivers(uint8_t *_pins_data, uint8_t _pin_rst, uint8_t 
         gpio_set_dir(pins_data[i], GPIO_OUT);
     }
 
+    // Initialize touch pins
     adc_init();
     gpio_init(pin_xp);
     gpio_init(pin_xm);
     gpio_init(pin_yp);
     gpio_init(pin_ym);
 
+    // Initialize control pins
     gpio_init(pin_cs);
     gpio_init(pin_rs);
     gpio_init(pin_rst);
     gpio_init(pin_wr);
     gpio_init(pin_rd);
-
     gpio_set_dir(pin_cs, GPIO_OUT);
     gpio_set_dir(pin_rs, GPIO_OUT);
     gpio_set_dir(pin_rst, GPIO_OUT);
     gpio_set_dir(pin_wr, GPIO_OUT);
     gpio_set_dir(pin_rd, GPIO_OUT);
-
     gpio_put(pin_cs, 1);
     gpio_put(pin_rst, 1);
     gpio_put(pin_wr, 1);
     gpio_put(pin_rd, 1);
+
+    // GPIO mask for data pins
     for (int i = 0; i < 8; i++)
         data_mask |= 1 << pins_data[i];
 }
 
+/**
+    Initialize panel, must be called before calling any draw functions
+    Rotation must be set or specified before init called, rotation is PORTRAIT by default
+ */
 void ili9486_drivers::init()
 {
+    // Hard reset the panel
     gpio_put(pin_rst, 1);
     sleep_ms(1);
     gpio_put(pin_rst, 0);
     sleep_us(15); // Reset pulse duration minimal 10uS
     gpio_put(pin_rst, 1);
     sleep_ms(120); // It is necessary to wait 5msec after releasing RESX before sending commands. Also Sleep Out command cannot be sent for 120msec.
-    const uint8_t *initCommand_ptr = initCommands_bodmer;
-    gpio_put(pin_cs, 0); // Select TFT manually
-    for (;;)
-    { // For each command...
-        uint8_t cmd = *initCommand_ptr++;
-        uint8_t num = *initCommand_ptr++; // Number of args to follow
-        if (cmd == 0xFF && num == 0xFF)
+
+    const uint8_t *initCommand_ptr = initCommands; // Load init command used
+    gpio_put(pin_cs, 0);                           // Select TFT manually
+
+    for (;;) // For each command...
+    {
+        uint8_t cmd = *initCommand_ptr++; // Command instruction byte
+        uint8_t num = *initCommand_ptr++; // Number of args to follow command
+        if (cmd == 0xFF && num == 0xFF)   // If both cmd and num of arg is 0xFF, it's the end of initCommands
             break;
         writeCommand(cmd);
-        uint_fast8_t ms = num & CMD_Delay; // If hibit set, delay follows args
+        uint_fast8_t ms = num & CMD_Delay; // Check if number of args contain CMD_Delay
         num &= ~CMD_Delay;                 // Mask out delay bit
-        if (num)
+        if (num)                           // If num is > 0 then
         {
-            do
-            { // For each argument...
+            do // writeData for number of args following cmd
+            {
                 writeData(*initCommand_ptr++);
             } while (--num);
         }
-        if (ms)
+        if (ms) // If CMD_Delay bit is set then delay before proceeding next command
         {
-            ms = *initCommand_ptr++; // Read post-command delay time (ms)
+            ms = *initCommand_ptr++; // Following args after num is delay duration in ms (maximum 255ms or 1 byte)
             sleep_ms((ms == 255 ? 500 : ms));
         }
     }
+     // Write rotation setting before doing pioinit() 
+     // because writeRotation still uses regular GPIO to write commands and data
     writeRotation();
     pioInit(pio_clock_int_divider, pio_clock_frac_divider);
-    fillScreen(0);
-    deselectTFT(); // Deselect TFT after PIO idle
+    fillScreen(0); // Fill screen with black at init
+    deselectTFT(); // Deselect TFT after PIO finishes transfer data from fillScreen()
 }
 
+/**
+ * Private function to apply rotation setting from _rot to panel, uses regular GPIO function to write commands and data
+ * Private because rotation cannot be changed after init, because PIO takes over data transfer after init
+ */
 void ili9486_drivers::writeRotation()
 {
     writeCommand(CMD_MemoryAccessControl);
@@ -183,13 +200,8 @@ void ili9486_drivers::pioInit(uint16_t clock_div, uint16_t fract_div)
     pull_stall_mask = 1u << (PIO_FDEBUG_TXSTALL_LSB + pio_sm);
 
     // Create the instructions for the jumps to send routines
-    pio_instr_jmp8 = pio_encode_jmp(program_offset + tft_io_offset_start_8);
     pio_instr_fill = pio_encode_jmp(program_offset + tft_io_offset_block_fill);
     pio_instr_addr = pio_encode_jmp(program_offset + tft_io_offset_set_addr_window);
-
-    // Create the instructions to set and clear the RS signal
-    pio_instr_set_rs = pio_encode_set((pio_src_dest)0, 1);
-    pio_instr_clr_rs = pio_encode_set((pio_src_dest)0, 0);
 }
 
 void ili9486_drivers::dmaInit(void (*onComplete_cb)(void))
@@ -212,24 +224,24 @@ void ili9486_drivers::pushBlock(uint16_t color, uint32_t len)
 {
     if (len)
     {
-        WAIT_FOR_STALL;
+        pio_waitForStall();
         tft_pio->sm[pio_sm].instr = pio_instr_fill;
 
-        TX_FIFO = color;
-        TX_FIFO = --len; // Decrement first as PIO sends n+1
+        tft_pio->txf[pio_sm] = color;
+        tft_pio->txf[pio_sm] = --len; // Decrement first as PIO sends n+1
     }
 }
 
 void ili9486_drivers::setWindow(int32_t x0, int32_t y0, int32_t x1, int32_t y1)
 {
-    WAIT_FOR_STALL;
+    pio_waitForStall();
     tft_pio->sm[pio_sm].instr = pio_instr_addr;
 
-    TX_FIFO = CMD_ColumnAddressSet;
-    TX_FIFO = (x0 << 16) | x1;
-    TX_FIFO = CMD_PageAddressSet;
-    TX_FIFO = (y0 << 16) | y1;
-    TX_FIFO = CMD_MemoryWrite;
+    tft_pio->txf[pio_sm] = CMD_ColumnAddressSet;
+    tft_pio->txf[pio_sm] = (x0 << 16) | x1;
+    tft_pio->txf[pio_sm] = CMD_PageAddressSet;
+    tft_pio->txf[pio_sm] = (y0 << 16) | y1;
+    tft_pio->txf[pio_sm] = CMD_MemoryWrite;
 }
 
 void ili9486_drivers::setAddressWindow(int32_t x, int32_t y, int32_t w, int32_t h)
@@ -240,8 +252,8 @@ void ili9486_drivers::setAddressWindow(int32_t x, int32_t y, int32_t w, int32_t 
 
 void ili9486_drivers::fillScreen(uint16_t color)
 {
-    uint32_t len = 480 * 320;
-    setAddressWindow(0, 0, 320, 480);
+    uint32_t len = _width * _height;
+    setAddressWindow(0, 0, _width, _height);
     pushBlock(color, len);
 }
 
@@ -250,21 +262,21 @@ void ili9486_drivers::pushColors(uint16_t *color, uint32_t len)
     const uint16_t *data = color;
     while (len > 4)
     {
-        WAIT_FOR_FIFO_FREE(5);
-        TX_FIFO = data[0];
-        TX_FIFO = data[1];
-        TX_FIFO = data[2];
-        TX_FIFO = data[3];
-        TX_FIFO = data[4];
+        pio_waitForFreeFIFO(5);
+        tft_pio->txf[pio_sm] = data[0];
+        tft_pio->txf[pio_sm] = data[1];
+        tft_pio->txf[pio_sm] = data[2];
+        tft_pio->txf[pio_sm] = data[3];
+        tft_pio->txf[pio_sm] = data[4];
         data += 5;
         len -= 5;
     }
 
     if (len)
     {
-        WAIT_FOR_FIFO_FREE(4);
+        pio_waitForFreeFIFO(4);
         while (len--)
-            TX_FIFO = *data++;
+            tft_pio->txf[pio_sm] = *data++;
     }
 }
 
@@ -284,6 +296,7 @@ void ili9486_drivers::writeData(uint8_t data)
     gpio_put(pin_wr, 0);
     gpio_put(pin_wr, 1);
 }
+
 void ili9486_drivers::writeCommand(uint8_t cmd)
 {
     gpio_put(pin_rs, 0); // Issue command / write command
@@ -355,34 +368,35 @@ void ili9486_drivers::sampleTouch(TouchCoordinate &tc)
     gpio_set_dir(pin_ym, GPIO_OUT);
     gpio_set_dir(pin_xp, GPIO_OUT);
 
-    tc.touched = x < touch_xCoordinateMax && x > touch_xCoordinateMin &&
-                 y < touch_yCoordinateMax && y > touch_yCoordinateMin &&
+    tc.touched = x < touch_xADCMax && x > touch_xADCMin &&
+                 y < touch_yADCMax && y > touch_yADCMin &&
                  z < touch_zPressureMax && z > touch_zPressureMin;
 
-    float x_tc = float(x - touch_xCoordinateMin) / float(touch_xCoordinateMax - touch_xCoordinateMin) * (_rot == LANDSCAPE || _rot == INVERTED_LANDSCAPE ? _width : _height);
-    float y_tc = float(y - touch_yCoordinateMin) / float(touch_yCoordinateMax - touch_yCoordinateMin) * (_rot == LANDSCAPE || _rot == INVERTED_LANDSCAPE ? _height : _width);
-    if (_rot == LANDSCAPE)
+    float x_tc = float(x - touch_xADCMin) / float(touch_xADCMax - touch_xADCMin) * (_rot == LANDSCAPE || _rot == INVERTED_LANDSCAPE ? _width : _height);
+    float y_tc = float(y - touch_yADCMin) / float(touch_yADCMax - touch_yADCMin) * (_rot == LANDSCAPE || _rot == INVERTED_LANDSCAPE ? _height : _width);
+    switch (_rot)
     {
+    case LANDSCAPE:
         tc.x = x_tc;
         tc.y = _height - y_tc;
-    }
-    else if (_rot == INVERTED_LANDSCAPE)
-    {
+        break;
+    case INVERTED_LANDSCAPE:
         tc.x = _width - x_tc;
         tc.y = y_tc;
-    }
-    else if (_rot == PORTRAIT)
-    {
+        break;
+    case PORTRAIT:
         tc.x = y_tc;
         tc.y = x_tc;
-    }
-    else
-    {
+        break;
+    case INVERTED_PORTRAIT:
         tc.x = _width - y_tc;
         tc.y = _height - x_tc;
+        break;
+    default:
+        tc.x = y_tc;
+        tc.y = x_tc;
+        break;
     }
-
-    printf("x : %d, y : %d\n", tc.x, tc.y);
 }
 
 uint16_t ili9486_drivers::create565Color(uint8_t r, uint8_t g, uint8_t b)
