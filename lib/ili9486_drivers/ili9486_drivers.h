@@ -1,7 +1,7 @@
 /**
  * @file ili9486_drivers.h
  * @author Figo Arzaki Maulana (figoarzaki123@gmail.com)
- * @brief
+ * @brief Bare minimal for RP2040 Microcontroller ILI9486 driver with PIO and DMA capability used for LVGL display driver
  * @version 0.1
  * @date 2022-06-09
  *
@@ -150,11 +150,18 @@ private:
             ;
     }
 
+    /**
+     * @brief Enter command mode by apply clear to RS pin
+     */
     __force_inline void pio_enterCommandMode()
     {
         pio_waitForStall();
         tft_pio->sm[pio_sm].instr = pio_instr_clr_rs;
     }
+
+    /**
+     * @brief Enter command mode by apply set to RS pin
+     */
     __force_inline void pio_enterDataMode()
     {
         pio_waitForStall();

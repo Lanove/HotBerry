@@ -1,7 +1,7 @@
 /**
  * @file ili9486_drivers.cpp
  * @author Figo Arzaki Maulana (figoarzaki123@gmail.com)
- * @brief
+ * @brief Bare minimal for RP2040 Microcontroller ILI9486 driver with PIO and DMA capability used for LVGL display driver
  * @version 0.1
  * @date 2022-06-09
  *
@@ -30,6 +30,7 @@ ili9486_drivers::ili9486_drivers(uint8_t *_pins_data, uint8_t _pin_rst, uint8_t 
 {
     // Store data pins array internally
     memcpy(pins_data, _pins_data, sizeof(uint8_t) * 8);
+    // Data pins initialization will be done by PIO init
 
     // Initialize touch pins
     adc_init();
@@ -51,7 +52,8 @@ ili9486_drivers::ili9486_drivers(uint8_t *_pins_data, uint8_t _pin_rst, uint8_t 
 }
 
 /**
-    Initialize panel, must be called before calling any draw functions
+ * @brief Initialize panel, must be called before calling any functions that uses data transfer to panel
+ * 
  */
 void ili9486_drivers::init()
 {
@@ -63,8 +65,8 @@ void ili9486_drivers::init()
     gpio_put(pin_rst, 1);
     sleep_ms(120); // It is necessary to wait 5msec after releasing RESX before sending commands. Also Sleep Out command cannot be sent for 120msec.
     pioInit(pio_clock_int_divider, pio_clock_frac_divider);
-    const uint8_t *initCommand_ptr = initCommands; // Load init command used
     selectTFT();
+    const uint8_t *initCommand_ptr = initCommands; // Load init command used
     for (;;) // For each command...
     {
         uint8_t cmd = *initCommand_ptr++; // Command instruction byte
@@ -92,14 +94,15 @@ void ili9486_drivers::init()
 }
 
 /**
- * Private function to apply rotation setting from _rot to panel, uses regular GPIO function to write commands and data
+ * @brief 
+ * Set the rotation of the panel on the fly
+ * @param rotation  Rotations enum, choose between PORTRAIT, LANDSCAPE, INVERTED_PORTRAIT or INVERTED_LANDSCAPE
  */
 void ili9486_drivers::setRotation(Rotations rotation)
 {
     _rot = rotation;
     selectTFT();
     writeCommand(CMD_MemoryAccessControl);
-
     switch (_rot)
     {
     case PORTRAIT: // Portrait
@@ -131,6 +134,11 @@ void ili9486_drivers::setRotation(Rotations rotation)
     deselectTFT();
 }
 
+/**
+ * @brief Initialize PIO
+ * @param clock_div the integer part of the clock divider
+ * @param fract_div the fractional part of the clock divider in 1/256s 
+ */
 void ili9486_drivers::pioInit(uint16_t clock_div, uint16_t fract_div)
 {
     // Find a free SM on one of the PIO's
@@ -192,25 +200,37 @@ void ili9486_drivers::pioInit(uint16_t clock_div, uint16_t fract_div)
     pio_instr_clr_rs = pio_encode_set((pio_src_dest)0, 0);
 }
 
+/**
+ * @brief Initialize DMA
+ * @param onComplete_cb ISR callback for DMA complete transfer (Use for trigger lv_disp_flush_ready)
+ */
 void ili9486_drivers::dmaInit(void (*onComplete_cb)(void))
 {
     dma_tx_channel = dma_claim_unused_channel(false);
-    if (dma_tx_channel < 0)
+    if (dma_tx_channel < 0) // Seems we don't have any DMA left, abort
         return;
     dma_tx_config = dma_channel_get_default_config(dma_tx_channel);
     channel_config_set_transfer_data_size(&dma_tx_config, DMA_SIZE_16);
+    // Set DMA to point to PIO
     channel_config_set_dreq(&dma_tx_config, pio_get_dreq(tft_pio, pio_sm, true));
+    // Enable IRQ and use onComplete_cb as the ISR handler
     dma_channel_set_irq0_enabled(dma_tx_channel, true);
     irq_set_exclusive_handler(DMA_IRQ_0, onComplete_cb);
     irq_set_enabled(DMA_IRQ_0, true);
     dma_used = true;
 }
 
+/**
+ * @brief Write solid block of a single color to screen
+ * @param color pixel color
+ * @param len length of the pixel draw block
+ */
 void ili9486_drivers::pushBlock(uint16_t color, uint32_t len)
 {
     if (len)
     {
         pio_waitForStall();
+        // Set PIO program counter to point to fill block instruction
         tft_pio->sm[pio_sm].instr = pio_instr_fill;
 
         tft_pio->txf[pio_sm] = color;
@@ -218,9 +238,17 @@ void ili9486_drivers::pushBlock(uint16_t color, uint32_t len)
     }
 }
 
+/**
+ * @brief Set draw window of the panel
+ * @param x0 Start x coordinate
+ * @param y0 Start y coordinate
+ * @param x1 End x coordinate
+ * @param y1 End y coordinate
+ */
 void ili9486_drivers::setWindow(int32_t x0, int32_t y0, int32_t x1, int32_t y1)
 {
     pio_waitForStall();
+        // Set PIO program counter to point to set draw window address instruction
     tft_pio->sm[pio_sm].instr = pio_instr_addr;
 
     tft_pio->txf[pio_sm] = CMD_ColumnAddressSet;
@@ -230,12 +258,23 @@ void ili9486_drivers::setWindow(int32_t x0, int32_t y0, int32_t x1, int32_t y1)
     tft_pio->txf[pio_sm] = CMD_MemoryWrite;
 }
 
+/**
+ * @brief Set draw window of the panel
+ * @param x0 Start x coordinate
+ * @param y0 Start y coordinate
+ * @param w Length of the draw window rectangle
+ * @param h Height of the draw window rectangle
+ */
 void ili9486_drivers::setAddressWindow(int32_t x, int32_t y, int32_t w, int32_t h)
 {
     int32_t xEnd = x + w - 1, yEnd = y + h - 1;
     setWindow(x, y, xEnd, yEnd);
 }
 
+/**
+ * @brief Fill whole screen display with single color
+ * @param color 
+ */
 void ili9486_drivers::fillScreen(uint16_t color)
 {
     uint32_t len = _width * _height;
@@ -243,6 +282,11 @@ void ili9486_drivers::fillScreen(uint16_t color)
     pushBlock(color, len);
 }
 
+/**
+ * @brief Draw colours to the panel screen with specified length using PIO (use setWindow() first)
+ * @param color Pointer of the colours variable (data must have the size bigger or same as len)
+ * @param len Total pixel to draw to panel
+ */
 void ili9486_drivers::pushColors(uint16_t *color, uint32_t len)
 {
     const uint16_t *data = color;
@@ -266,6 +310,11 @@ void ili9486_drivers::pushColors(uint16_t *color, uint32_t len)
     }
 }
 
+/**
+ * @brief Draw colours to the panel screen with specified length using PIO and DMA (use setWindow() first)
+ * @param color Pointer of the colours variable (data must have the size bigger or same as len)
+ * @param len Total pixel to draw to panel
+ */
 void ili9486_drivers::pushColorsDMA(uint16_t *colors, uint32_t len)
 {
     if (!dma_used)
@@ -274,6 +323,10 @@ void ili9486_drivers::pushColorsDMA(uint16_t *colors, uint32_t len)
     dma_channel_configure(dma_tx_channel, &dma_tx_config, &tft_pio->txf[pio_sm], (uint16_t *)colors, len, true);
 }
 
+/**
+ * @brief Write single byte of data to panel with PIO
+ * @param data Data byte to write
+ */
 void ili9486_drivers::writeData(uint8_t data)
 {
     pio_enterDataMode();
@@ -281,6 +334,10 @@ void ili9486_drivers::writeData(uint8_t data)
     tft_pio->txf[pio_sm] = data;
 }
 
+/**
+ * @brief Write command to panel with PIO
+ * @param cmd Command instruction byte
+ */
 void ili9486_drivers::writeCommand(uint8_t cmd)
 {
     pio_enterCommandMode();
@@ -288,72 +345,83 @@ void ili9486_drivers::writeCommand(uint8_t cmd)
     tft_pio->txf[pio_sm] = cmd;
 }
 
+/**
+ * @brief Sample touch and store to passed TouchCoordinate struct
+ * @param tc TouchCoordinate struct to store the sampled touch coordinate
+ */
 void ili9486_drivers::sampleTouch(TouchCoordinate &tc)
 {
-    uint16_t x, y, z;
     // The whole function typically takes 25uS at 250MHz overlocked sysclock (taken with time_us_64())
-    if (dmaBusy())
+    uint16_t x, y, z;
+    if (dmaBusy()) // Abort sample because DMA is still used
         return;
-    deselectTFT();             // Make sure TFT is not selected before sampling the touchscreen
+    deselectTFT(); // Make sure TFT is not selected before sampling the touchscreen
     uint16_t samples[2] = {0}; // X and Y is sampled twice
+
+    // Initialize touch pins to sample X raw ADC
     gpio_set_dir(pin_yp, GPIO_OUT);
     gpio_set_dir(pin_ym, GPIO_OUT);
     gpio_set_dir(pin_xm, GPIO_IN);
     gpio_set_dir(pin_xp, GPIO_IN);
     adc_gpio_init(xp_adc_channel);
-
     gpio_put(pin_ym, 1);
     gpio_put(pin_yp, 0);
 
+    // Sample X raw ADC
     adc_select_input(xp_adc_channel);
     samples[0] = adc_read();
     samples[1] = adc_read();
     x = (samples[0] + samples[1]) / 2; // needed to be stored, because pressure measurement needs X- and X+ touch measurement
 
+    // Initialize touch pins to sample Y raw ADC
     gpio_set_dir(pin_xm, GPIO_OUT);
     gpio_set_dir(pin_xp, GPIO_OUT);
     gpio_set_dir(pin_yp, GPIO_IN);
     gpio_set_dir(pin_ym, GPIO_IN);
     adc_gpio_init(ym_adc_channel);
-
     gpio_put(pin_xm, 0);
     gpio_put(pin_xp, 1);
 
+    // Sample Y raw ADC
     adc_select_input(ym_adc_channel);
     samples[0] = adc_read();
     samples[1] = adc_read();
     y = (samples[0] + samples[1]) / 2;
 
-    // From AVR341:AVR341:Four and five-wire Touch Screen Controller
+    // Initialize touch pins to sample Z pressure ADC
     gpio_set_dir(pin_yp, GPIO_OUT);
     gpio_set_dir(pin_xm, GPIO_OUT);
     gpio_set_dir(pin_ym, GPIO_IN);
     gpio_set_dir(pin_xp, GPIO_IN);
     adc_gpio_init(xp_adc_channel);
     adc_gpio_init(ym_adc_channel);
-
     gpio_put(pin_yp, 1);
     gpio_put(pin_xm, 0);
 
+    // Sample Z pressure ADC
     adc_select_input(xp_adc_channel);
     uint16_t z1 = adc_read();
     adc_select_input(ym_adc_channel);
     uint16_t z2 = adc_read();
 
+    // From AVR341:Four and five-wire Touch Screen Controller
     // Equation 2.1 from AVR341 docs
     float rtouch;
     rtouch = touch_xPlateResistance * x / 4096 * ((z2 / z1) - 1);
     z = rtouch;
 
+    // Return all touch pins to OUT to be used for panel operations
     gpio_set_dir(pin_yp, GPIO_OUT);
     gpio_set_dir(pin_xm, GPIO_OUT);
     gpio_set_dir(pin_ym, GPIO_OUT);
     gpio_set_dir(pin_xp, GPIO_OUT);
 
+    // Determine if touchscreen is really touched by physical thing and sampled ADC is not some random noises
     tc.touched = x < touch_xADCMax && x > touch_xADCMin &&
                  y < touch_yADCMax && y > touch_yADCMin &&
                  z < touch_zPressureMax && z > touch_zPressureMin;
 
+    // Maps raw ADC to real X and Y coordinates
     float x_tc = float(x - touch_xADCMin) / float(touch_xADCMax - touch_xADCMin) * (_rot == LANDSCAPE || _rot == INVERTED_LANDSCAPE ? _width : _height);
     float y_tc = float(y - touch_yADCMin) / float(touch_yADCMax - touch_yADCMin) * (_rot == LANDSCAPE || _rot == INVERTED_LANDSCAPE ? _height : _width);
     switch (_rot)
@@ -381,6 +449,13 @@ void ili9486_drivers::sampleTouch(TouchCoordinate &tc)
     }
 }
 
+/**
+ * @brief Create 565 16-bit color from individual r,g and b value
+ * @param r red color (5-bit or 31 decimal max)
+ * @param g green color (6-bit or 63 decimal max)
+ * @param b blue color (5-bit or 31 decimal max)
+ * @return uint16_t 
+ */
 uint16_t ili9486_drivers::create565Color(uint8_t r, uint8_t g, uint8_t b)
 {
     return ((r & 0x1F) << 11) | ((g & 0x3F) << 5) | (b & 0x1F);
