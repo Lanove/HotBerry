@@ -49,7 +49,15 @@ static constexpr uint8_t CMD_PartialArea = 0x30;
 static constexpr uint8_t CMD_VerticalScrollingDefinition = 0x33;
 static constexpr uint8_t CMD_TearingEffectLineOff = 0x34;
 static constexpr uint8_t CMD_TearingEffectLineOn = 0x35;
+
+static constexpr uint8_t MASK_MY = 0x80;
+static constexpr uint8_t MASK_MX = 0x40;
+static constexpr uint8_t MASK_MV = 0x20;
+static constexpr uint8_t MASK_ML = 0x10;
+static constexpr uint8_t MASK_BGR = 0x08;
+static constexpr uint8_t MASK_MH = 0x04;
 static constexpr uint8_t CMD_MemoryAccessControl = 0x36;
+
 static constexpr uint8_t CMD_VerticalScrollingStartAddress = 0x37;
 static constexpr uint8_t CMD_IdleModeOff = 0x38;
 static constexpr uint8_t CMD_IdleModeOn = 0x39;
@@ -167,8 +175,8 @@ static constexpr uint8_t initCommands_bodmer[] =
         CMD_PowerControl2, 1, 0x41, // VGH = Vci1x6, VGL = -Vci1 4. Note: To prevent the device damage, please keep VGH – DDVDH < 8V condition.
         CMD_PowerControl3, 1, 0x44,
         CMD_VCOMControl1, 3, 0x00, // nVM -- 0 : NV memory is not programmed
-        0x12,                       // VCM_REG [7:0] is used to set factor to generate VCOM voltage from the reference voltage VREG2OUT. -- VCOM = -1.71875
-        0x80,                       // VCM_REG_EN -- 1: VCOM value from VCM_REG [7:0].
+        0x12,                      // VCM_REG [7:0] is used to set factor to generate VCOM voltage from the reference voltage VREG2OUT. -- VCOM = -1.71875
+        0x80,                      // VCM_REG_EN -- 1: VCOM value from VCM_REG [7:0].
         CMD_PositiveGammaControl, 15, 0x0F, 0x1F, 0x1C, 0x0C, 0x0F, 0x08, 0x48, 0x98, 0x37, 0x0A, 0x13, 0x04, 0x11, 0x0D, 0x00,
         CMD_NegativeGammaControl, 15, 0x0F, 0x32, 0x2E, 0x0B, 0x0D, 0x05, 0x47, 0x75, 0x37, 0x06, 0x10, 0x03, 0x24, 0x20, 0x00,
         CMD_DisplayInversionOff, 0,

@@ -130,17 +130,16 @@ int main()
     stdio_init_all();
     while (!tud_cdc_connected())
         sleep_ms(100);
-
     printf("tud_cdc_connected()\n");
     if (!set_sys_clock_khz(freq_mhz * 1000, false))
         printf("system clock %dMHz failed\n", freq_mhz);
     else
         printf("system clock now %dMHz\n", freq_mhz);
-    tft = new ili9486_drivers(tft_dataPins, TFT_RST, TFT_CS, TFT_RS, TFT_WR, TFT_RD, TOUCH_XP, TOUCH_XM, TOUCH_YP, TOUCH_YM, TOUCH_XP_ADC_CHANNEL, TOUCH_YM_ADC_CHANNEL);
     measure_freqs();
+    tft = new ili9486_drivers(tft_dataPins, TFT_RST, TFT_CS, TFT_RS, TFT_WR, TFT_RD, TOUCH_XP, TOUCH_XM, TOUCH_YP, TOUCH_YM, TOUCH_XP_ADC_CHANNEL, TOUCH_YM_ADC_CHANNEL);
+    tft->setRotation(LANDSCAPE);
     tft->init();
     tft->dmaInit(lv_dma_onComplete_cb);
-    tft->swapTouchXY(true);
     init_lvgl();
     lv_demo_widgets();
     struct repeating_timer timer;
@@ -157,22 +156,22 @@ static lv_disp_drv_t disp_drv;
 void init_lvgl()
 {
     lv_init();
-    static constexpr size_t displayBufferSize = 320 * 100;
+    static constexpr size_t displayBufferSize = 480 * 80;
     /*A static or global variable to store the buffers*/
     static lv_disp_draw_buf_t disp_buf;
 
     /*Static or global buffer(s). The second buffer is optional*/
     static lv_color_t buf[displayBufferSize]; //
-    static lv_color_t buf2[displayBufferSize];
+    // static lv_color_t buf2[displayBufferSize];
 
     /*Initialize `disp_buf` with the buffer(s). With only one buffer use NULL instead buf_2 */
-    lv_disp_draw_buf_init(&disp_buf, buf, buf2, displayBufferSize);
+    lv_disp_draw_buf_init(&disp_buf, buf, NULL, displayBufferSize);
 
     /*Initialize the display*/
     lv_disp_drv_init(&disp_drv);
     /*Change the following line to your display resolution*/
-    disp_drv.hor_res = 320;
-    disp_drv.ver_res = 480;
+    disp_drv.hor_res = tft->width();
+    disp_drv.ver_res = tft->height();
     disp_drv.flush_cb = lv_display_flush_cb;
     disp_drv.draw_buf = &disp_buf;
     lv_disp_drv_register(&disp_drv);
@@ -213,12 +212,11 @@ void lv_input_touch_cb(lv_indev_drv_t *indev_driver, lv_indev_data_t *data)
 {
     TouchCoordinate tc;
     tft->sampleTouch(tc);
-    if (!tft->isTouchValid(tc))
+    if (!tc.touched)
         data->state = LV_INDEV_STATE_REL;
     else
     {
         data->state = LV_INDEV_STATE_PR;
-        tft->touchToPanelCoordinate(tc);
         /*Set the coordinates*/
         data->point.x = tc.x;
         data->point.y = tc.y;

@@ -32,8 +32,6 @@ ili9486_drivers::ili9486_drivers(uint8_t *_pins_data, uint8_t _pin_rst, uint8_t 
     {
         gpio_init(pins_data[i]);
         gpio_set_dir(pins_data[i], GPIO_OUT);
-        gpio_set_drive_strength(pins_data[i], GPIO_DRIVE_STRENGTH_12MA);
-        gpio_set_slew_rate(pins_data[i], GPIO_SLEW_RATE_FAST);
     }
 
     adc_init();
@@ -53,17 +51,6 @@ ili9486_drivers::ili9486_drivers(uint8_t *_pins_data, uint8_t _pin_rst, uint8_t 
     gpio_set_dir(pin_rst, GPIO_OUT);
     gpio_set_dir(pin_wr, GPIO_OUT);
     gpio_set_dir(pin_rd, GPIO_OUT);
-
-    gpio_set_drive_strength(pin_cs, GPIO_DRIVE_STRENGTH_12MA);
-    gpio_set_drive_strength(pin_rs, GPIO_DRIVE_STRENGTH_12MA);
-    gpio_set_drive_strength(pin_rst, GPIO_DRIVE_STRENGTH_12MA);
-    gpio_set_drive_strength(pin_wr, GPIO_DRIVE_STRENGTH_12MA);
-    gpio_set_drive_strength(pin_rd, GPIO_DRIVE_STRENGTH_12MA);
-    gpio_set_slew_rate(pin_cs, GPIO_SLEW_RATE_FAST);
-    gpio_set_slew_rate(pin_rs, GPIO_SLEW_RATE_FAST);
-    gpio_set_slew_rate(pin_rst, GPIO_SLEW_RATE_FAST);
-    gpio_set_slew_rate(pin_wr, GPIO_SLEW_RATE_FAST);
-    gpio_set_slew_rate(pin_rd, GPIO_SLEW_RATE_FAST);
 
     gpio_put(pin_cs, 1);
     gpio_put(pin_rst, 1);
@@ -89,25 +76,14 @@ void ili9486_drivers::init()
         uint8_t num = *initCommand_ptr++; // Number of args to follow
         if (cmd == 0xFF && num == 0xFF)
             break;
-
-        gpio_put(pin_rs, 0); // Issue command / write command
-        gpio_put(pin_rd, 1);
-        gpio_put_masked(data_mask, cmd << 8);
-        gpio_put(pin_wr, 0);
-        gpio_put(pin_wr, 1);
-
+        writeCommand(cmd);
         uint_fast8_t ms = num & CMD_Delay; // If hibit set, delay follows args
         num &= ~CMD_Delay;                 // Mask out delay bit
         if (num)
         {
-            gpio_put(pin_rs, 1); // Write data
-            gpio_put(pin_rd, 1);
             do
             { // For each argument...
-                gpio_put_masked(data_mask, (*initCommand_ptr) << 8);
-                initCommand_ptr++;
-                gpio_put(pin_wr, 0);
-                gpio_put(pin_wr, 1);
+                writeData(*initCommand_ptr++);
             } while (--num);
         }
         if (ms)
@@ -116,9 +92,43 @@ void ili9486_drivers::init()
             sleep_ms((ms == 255 ? 500 : ms));
         }
     }
+    writeRotation();
     pioInit(pio_clock_int_divider, pio_clock_frac_divider);
     fillScreen(0);
     deselectTFT(); // Deselect TFT after PIO idle
+}
+
+void ili9486_drivers::writeRotation()
+{
+    writeCommand(CMD_MemoryAccessControl);
+    switch (_rot)
+    {
+    case PORTRAIT: // Portrait
+        writeData(MASK_BGR | MASK_MX);
+        _width = panel_width;
+        _height = panel_height;
+        break;
+    case LANDSCAPE: // Landscape (Portrait + 90)
+        writeData(MASK_BGR | MASK_MV);
+        _width = panel_height;
+        _height = panel_width;
+        break;
+    case INVERTED_PORTRAIT: // Inverter portrait
+        writeData(MASK_BGR | MASK_MY);
+        _width = panel_width;
+        _height = panel_height;
+        break;
+    case INVERTED_LANDSCAPE: // Inverted landscape
+        writeData(MASK_BGR | MASK_MV | MASK_MX | MASK_MY);
+        _width = panel_height;
+        _height = panel_width;
+        break;
+    default: // Portrait
+        writeData(MASK_BGR | MASK_MX);
+        _width = panel_width;
+        _height = panel_height;
+        break;
+    }
 }
 
 void ili9486_drivers::pioInit(uint16_t clock_div, uint16_t fract_div)
@@ -266,8 +276,26 @@ void ili9486_drivers::pushColorsDMA(uint16_t *colors, uint32_t len)
     dma_channel_configure(dma_tx_channel, &dma_tx_config, &tft_pio->txf[pio_sm], (uint16_t *)colors, len, true);
 }
 
+void ili9486_drivers::writeData(uint8_t data)
+{
+    gpio_put(pin_rs, 1); // Write data
+    gpio_put(pin_rd, 1);
+    gpio_put_masked(data_mask, data << 8);
+    gpio_put(pin_wr, 0);
+    gpio_put(pin_wr, 1);
+}
+void ili9486_drivers::writeCommand(uint8_t cmd)
+{
+    gpio_put(pin_rs, 0); // Issue command / write command
+    gpio_put(pin_rd, 1);
+    gpio_put_masked(data_mask, cmd << 8);
+    gpio_put(pin_wr, 0);
+    gpio_put(pin_wr, 1);
+}
+
 void ili9486_drivers::sampleTouch(TouchCoordinate &tc)
 {
+    uint16_t x, y, z;
     // The whole function typically takes 25uS at 250MHz overlocked sysclock (taken with time_us_64())
     if (dmaBusy())
         return;
@@ -285,11 +313,7 @@ void ili9486_drivers::sampleTouch(TouchCoordinate &tc)
     adc_select_input(xp_adc_channel);
     samples[0] = adc_read();
     samples[1] = adc_read();
-    uint16_t x_raw = (samples[0] + samples[1]) / 2; // needed to be stored, because pressure measurement needs X- and X+ touch measurement
-    if (!touch_swapxy)
-        tc.x = x_raw;
-    else
-        tc.y = x_raw;
+    x = (samples[0] + samples[1]) / 2; // needed to be stored, because pressure measurement needs X- and X+ touch measurement
 
     gpio_set_dir(pin_xm, GPIO_OUT);
     gpio_set_dir(pin_xp, GPIO_OUT);
@@ -303,10 +327,7 @@ void ili9486_drivers::sampleTouch(TouchCoordinate &tc)
     adc_select_input(ym_adc_channel);
     samples[0] = adc_read();
     samples[1] = adc_read();
-    if (!touch_swapxy)
-        tc.y = (samples[0] + samples[1]) / 2;
-    else
-        tc.x = (samples[0] + samples[1]) / 2;
+    y = (samples[0] + samples[1]) / 2;
 
     // From AVR341:AVR341:Four and five-wire Touch Screen Controller
     gpio_set_dir(pin_yp, GPIO_OUT);
@@ -326,13 +347,42 @@ void ili9486_drivers::sampleTouch(TouchCoordinate &tc)
 
     // Equation 2.1 from AVR341 docs
     float rtouch;
-    rtouch = touch_xPlateResistance * x_raw / 4096 * ((z2 / z1) - 1);
-    tc.z = rtouch;
+    rtouch = touch_xPlateResistance * x / 4096 * ((z2 / z1) - 1);
+    z = rtouch;
 
     gpio_set_dir(pin_yp, GPIO_OUT);
     gpio_set_dir(pin_xm, GPIO_OUT);
     gpio_set_dir(pin_ym, GPIO_OUT);
     gpio_set_dir(pin_xp, GPIO_OUT);
+
+    tc.touched = x < touch_xCoordinateMax && x > touch_xCoordinateMin &&
+                 y < touch_yCoordinateMax && y > touch_yCoordinateMin &&
+                 z < touch_zPressureMax && z > touch_zPressureMin;
+
+    float x_tc = float(x - touch_xCoordinateMin) / float(touch_xCoordinateMax - touch_xCoordinateMin) * (_rot == LANDSCAPE || _rot == INVERTED_LANDSCAPE ? _width : _height);
+    float y_tc = float(y - touch_yCoordinateMin) / float(touch_yCoordinateMax - touch_yCoordinateMin) * (_rot == LANDSCAPE || _rot == INVERTED_LANDSCAPE ? _height : _width);
+    if (_rot == LANDSCAPE)
+    {
+        tc.x = x_tc;
+        tc.y = _height - y_tc;
+    }
+    else if (_rot == INVERTED_LANDSCAPE)
+    {
+        tc.x = _width - x_tc;
+        tc.y = y_tc;
+    }
+    else if (_rot == PORTRAIT)
+    {
+        tc.x = y_tc;
+        tc.y = x_tc;
+    }
+    else
+    {
+        tc.x = _width - y_tc;
+        tc.y = _height - x_tc;
+    }
+
+    printf("x : %d, y : %d\n", tc.x, tc.y);
 }
 
 uint16_t ili9486_drivers::create565Color(uint8_t r, uint8_t g, uint8_t b)

@@ -1,5 +1,6 @@
 {
   "cmake.configureOnOpen": false,
+  "cmake.generator": "Unix Makefiles",
   "cmake.statusbar.advanced": {
     "debug" : {
       "visibility": "hidden"
@@ -7,10 +8,10 @@
       "visibility": "hidden"
                },
     "build" : {
-      "visibility": "hidden"
+      "visibility": "show"
                },
     "buildTarget" : {
-      "visibility": "hidden"
+      "visibility": "show"
                },
     },
     "files.associations": {

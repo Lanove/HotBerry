@@ -62,17 +62,27 @@
 static constexpr uint16_t touch_xPlateResistance = 241; // Measured resistance between XP and XM
 static constexpr uint16_t touch_zPressureMin = 20;
 static constexpr uint16_t touch_zPressureMax = 1400;
-static constexpr uint16_t touch_xCoordinateMax = 3400;
-static constexpr uint16_t touch_xCoordinateMin = 400;
-static constexpr uint16_t touch_yCoordinateMax = 3000;
-static constexpr uint16_t touch_yCoordinateMin = 650;
+static constexpr uint16_t touch_xCoordinateMax = 3560;
+static constexpr uint16_t touch_xCoordinateMin = 370;
+static constexpr uint16_t touch_yCoordinateMax = 3270;
+static constexpr uint16_t touch_yCoordinateMin = 720;
 // PIO runs at sysclk/2, 125MHz, (write cycle of 64ns)
 static constexpr uint32_t pio_clock_int_divider = 2;
 static constexpr uint32_t pio_clock_frac_divider = 0;
+static constexpr uint16_t panel_width = 320;
+static constexpr uint16_t panel_height = 480;
+
+enum Rotations{
+    PORTRAIT,
+    LANDSCAPE,
+    INVERTED_PORTRAIT,
+    INVERTED_LANDSCAPE
+};
 
 struct TouchCoordinate
 {
     uint16_t x = 0, y = 0, z = 0;
+    bool touched;
 };
 
 /**
@@ -104,48 +114,29 @@ public:
     void pushColors(uint16_t *color, uint32_t len);
     void pushColorsDMA(uint16_t *colors, uint32_t len);
     void sampleTouch(TouchCoordinate &tc);
-    __force_inline void touchToPanelCoordinate(TouchCoordinate &tc)
-    {
-        if (!touch_swapxy)
-        {
-            float x = float(tc.x - touch_xCoordinateMin) / float(touch_xCoordinateMax - touch_xCoordinateMin) * 320.;
-            float y = float(tc.y - touch_yCoordinateMin) / float(touch_yCoordinateMax - touch_yCoordinateMin) * 480.;
-            tc.x = x;
-            tc.y = y;
-        }
-        else
-        {
-            float x = float(tc.x - touch_yCoordinateMin) / float(touch_yCoordinateMax - touch_yCoordinateMin) * 320.;
-            float y = float(tc.y - touch_xCoordinateMin) / float(touch_xCoordinateMax - touch_xCoordinateMin) * 480.;
-            tc.x = x;
-            tc.y = y;
-        }
-    }
-    __force_inline bool isTouchValid(TouchCoordinate &tc) { return touch_swapxy ? tc.x < touch_yCoordinateMax && tc.x > touch_yCoordinateMin &&
-                                                                                      tc.y < touch_xCoordinateMax && tc.y > touch_xCoordinateMin &&
-                                                                                      tc.z < touch_zPressureMax && tc.z > touch_zPressureMin
-                                                                                : tc.x < touch_xCoordinateMax && tc.x > touch_xCoordinateMin &&
-                                                                                      tc.y < touch_yCoordinateMax && tc.y > touch_yCoordinateMin &&
-                                                                                      tc.z < touch_zPressureMax && tc.z > touch_zPressureMin; }
+    __force_inline void setRotation(Rotations rt){_rot = rt;}
     __force_inline void selectTFT()
     {
-        WAIT_FOR_STALL;
+        if(!dma_used) WAIT_FOR_STALL;
         gpio_put(pin_cs, 0);
     }
     __force_inline void deselectTFT()
     {
-        WAIT_FOR_STALL;
+        if(!dma_used) WAIT_FOR_STALL;
         gpio_put(pin_cs, 1);
     }
-    __force_inline void swapTouchXY(bool swap) { touch_swapxy = swap; }
     void dmaInit(void (*onComplete_cb)(void));
     __force_inline bool dmaBusy() { return dma_channel_is_busy(dma_tx_channel); };
     __force_inline void dmaWait() { dma_channel_wait_for_finish_blocking(dma_tx_channel); };
     __force_inline void dmaClearIRQ() { dma_hw->ints0 = 1u << dma_tx_channel; }
-
+    __force_inline uint16_t width(){ return _width;}
+    __force_inline uint16_t height(){ return _height;}
 private:
     void pioInit(uint16_t clock_div, uint16_t fract_div);
     void pushBlock(uint16_t color, uint32_t len);
+    void writeRotation();
+    void writeData(uint8_t data);
+    void writeCommand(uint8_t cmd);
 
     // Community RP2040 board package by Earle Philhower
     PIO tft_pio = pio0; // Code will try both pio's to find a free SM
@@ -224,5 +215,8 @@ private:
     int32_t dma_tx_channel;
     dma_channel_config dma_tx_config;
     bool dma_used;
+    Rotations _rot = PORTRAIT;
+    uint16_t _width = 0;
+    uint16_t _height = 0;
 };
 #endif
