@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD 17)
 pico_sdk_init()
 project(ili9486_drivers)
 
-file(GLOB FILES *.cpp *.h)
+file(GLOB FILES ./*.cpp ./*.h)
 add_library(ili9486_drivers ${FILES})
 pico_generate_pio_header(ili9486_drivers ${CMAKE_CURRENT_LIST_DIR}/pio_8bit_parallel.pio OUTPUT_DIR ${CMAKE_CURRENT_LIST_DIR})
 

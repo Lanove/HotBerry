@@ -10,6 +10,8 @@
 #include <tusb.h>
 #include "lvgl.h"
 #include "demos/lv_demos.h"
+#include "MAX6675.h"
+#include "movingAvg.h"
 
 #define HIGH 1
 #define LOW 0
@@ -60,6 +62,8 @@ enum IO
 
 uint8_t tft_dataPins[8] = {TFT_D0, TFT_D1, TFT_D2, TFT_D3, TFT_D4, TFT_D5, TFT_D6, TFT_D7};
 ili9486_drivers *tft;
+MAX6675 *therm;
+movingAvg temperature_raw(10);
 
 void shiftData8(uint8_t data)
 {
@@ -136,16 +140,25 @@ int main()
     else
         printf("system clock now %dMHz\n", freq_mhz);
     measure_freqs();
+    temperature_raw.begin();
     tft = new ili9486_drivers(tft_dataPins, TFT_RST, TFT_CS, TFT_RS, TFT_WR, TFT_RD, TOUCH_XP, TOUCH_XM, TOUCH_YP, TOUCH_YM, TOUCH_XP_ADC_CHANNEL, TOUCH_YM_ADC_CHANNEL);
+    therm = new MAX6675(THERM_DATA, THERM_SCK, THERM_CS);
     tft->init();
     tft->setRotation(INVERTED_LANDSCAPE);
     tft->dmaInit(lv_dma_onComplete_cb);
+    therm->init();
     init_lvgl();
     lv_demo_widgets();
     struct repeating_timer timer;
     add_repeating_timer_ms(5, lv_tick_inc_cb, NULL, &timer);
     while (true)
     {
+        uint16_t therm_adc = therm->sample();
+        if (therm_adc != 0xFFFF && therm_adc != 0xFFFE)
+        {
+            uint16_t avg = temperature_raw.reading(therm_adc);
+            printf("raw %.2f avg %.2fC\n", therm->toCelcius(therm_adc), therm->toCelcius(avg));
+        }
         lv_task_handler();
         sleep_ms(1);
     }
@@ -217,7 +230,6 @@ void lv_input_touch_cb(lv_indev_drv_t *indev_driver, lv_indev_data_t *data)
     else
     {
         data->state = LV_INDEV_STATE_PR;
-        /*Set the coordinates*/
         data->point.x = tc.x;
         data->point.y = tc.y;
     }
