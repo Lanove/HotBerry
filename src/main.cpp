@@ -1,6 +1,5 @@
-#include <stdio.h>
-#include "pico/stdlib.h"
-#include "ili9486_drivers.h"
+#include "globals.h"
+#include "lv_drivers.h"
 #include "hardware/pll.h"
 #include "hardware/clocks.h"
 #include "hardware/structs/pll.h"
@@ -12,56 +11,11 @@
 #include "demos/lv_demos.h"
 #include "MAX6675.h"
 #include "movingAvg.h"
+#include "lv_app.h"
 
 #define HIGH 1
 #define LOW 0
 
-enum IO
-{
-    SD_CS = 5,
-    SD_RX = 4,
-    SD_SCK = 2,
-    SD_TX = 7,
-
-    TFT_D0 = 8,
-    TFT_D1 = 9,
-    TFT_D2 = 10,
-    TFT_D3 = 11,
-    TFT_D4 = 12,
-    TFT_D5 = 13,
-    TFT_D6 = 14,
-    TFT_D7 = 15,
-
-    TFT_CS = 26, // Also ADC0
-    TFT_RS = 27, // Also ADC1
-    TFT_WR = 28, // Also ADC2
-    TFT_RD = 29, // Also ADC3
-    TFT_RST = 25,
-
-    TOUCH_XP = TFT_RD, // ADC channel 3 (TFT_RD)
-    TOUCH_YP = SD_TX,
-    TOUCH_XM = SD_CS,
-    TOUCH_YM = TFT_CS, // ADC channel 0 (TFT_CS)
-    TOUCH_YM_ADC_CHANNEL = 0,
-    TOUCH_XP_ADC_CHANNEL = 3,
-
-    THERM_DATA = 18,
-    THERM_CS = 19,
-    THERM_SCK = 20,
-    SFT_DATA = 21,
-    SFT_LATCH = 22,
-    SFT_SCK = 23,
-    I2C0_SDA = 0,
-    I2C0_SCL = 1,
-    ENC_A = 6,
-    ENC_B = 3,
-    ENC_BTN = 24,
-    UART0_TX = 16,
-    UART0_RX = 17
-};
-
-uint8_t tft_dataPins[8] = {TFT_D0, TFT_D1, TFT_D2, TFT_D3, TFT_D4, TFT_D5, TFT_D6, TFT_D7};
-ili9486_drivers *tft;
 MAX6675 *therm;
 movingAvg temperature_raw(10);
 
@@ -122,18 +76,12 @@ uint32_t rnd_whitened(void)
     return random;
 }
 
-void init_lvgl();
-void lv_display_flush_cb(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p);
-void lv_input_touch_cb(lv_indev_drv_t *indev_driver, lv_indev_data_t *data);
-bool lv_tick_inc_cb(struct repeating_timer *t);
-void lv_dma_onComplete_cb();
-
 int main()
 {
     uint32_t freq_mhz = 250;
     stdio_init_all();
-    while (!tud_cdc_connected())
-        sleep_ms(100);
+    // while (!tud_cdc_connected())
+        // sleep_ms(100);
     printf("tud_cdc_connected()\n");
     if (!set_sys_clock_khz(freq_mhz * 1000, false))
         printf("system clock %dMHz failed\n", freq_mhz);
@@ -141,16 +89,10 @@ int main()
         printf("system clock now %dMHz\n", freq_mhz);
     measure_freqs();
     temperature_raw.begin();
-    tft = new ili9486_drivers(tft_dataPins, TFT_RST, TFT_CS, TFT_RS, TFT_WR, TFT_RD, TOUCH_XP, TOUCH_XM, TOUCH_YP, TOUCH_YM, TOUCH_XP_ADC_CHANNEL, TOUCH_YM_ADC_CHANNEL);
     therm = new MAX6675(THERM_DATA, THERM_SCK, THERM_CS);
-    tft->init();
-    tft->setRotation(INVERTED_LANDSCAPE);
-    tft->dmaInit(lv_dma_onComplete_cb);
     therm->init();
-    init_lvgl();
-    lv_demo_widgets();
-    struct repeating_timer timer;
-    add_repeating_timer_ms(5, lv_tick_inc_cb, NULL, &timer);
+    init_display();
+    lv_app_entry();
     while (true)
     {
         uint16_t therm_adc = therm->sample();
@@ -163,74 +105,4 @@ int main()
         sleep_ms(1);
     }
     return 0;
-}
-
-static lv_disp_drv_t disp_drv;
-void init_lvgl()
-{
-    lv_init();
-    static constexpr size_t displayBufferSize = 480 * 80;
-    /*A static or global variable to store the buffers*/
-    static lv_disp_draw_buf_t disp_buf;
-
-    /*Static or global buffer(s). The second buffer is optional*/
-    static lv_color_t buf[displayBufferSize]; //
-    // static lv_color_t buf2[displayBufferSize];
-
-    /*Initialize `disp_buf` with the buffer(s). With only one buffer use NULL instead buf_2 */
-    lv_disp_draw_buf_init(&disp_buf, buf, NULL, displayBufferSize);
-
-    /*Initialize the display*/
-    lv_disp_drv_init(&disp_drv);
-    /*Change the following line to your display resolution*/
-    disp_drv.hor_res = tft->width();
-    disp_drv.ver_res = tft->height();
-    disp_drv.flush_cb = lv_display_flush_cb;
-    disp_drv.draw_buf = &disp_buf;
-    lv_disp_drv_register(&disp_drv);
-
-    /*Initialize the (dummy) input device driver*/
-    static lv_indev_drv_t indev_drv;
-    lv_indev_drv_init(&indev_drv);
-    indev_drv.type = LV_INDEV_TYPE_POINTER;
-    indev_drv.read_cb = lv_input_touch_cb;
-    lv_indev_drv_register(&indev_drv);
-}
-
-bool lv_tick_inc_cb(struct repeating_timer *t)
-{
-    lv_tick_inc(5);
-    return true;
-}
-
-void lv_display_flush_cb(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p)
-{
-    if (!tft->dmaBusy())
-    {
-        uint32_t w = (area->x2 - area->x1 + 1);
-        uint32_t h = (area->y2 - area->y1 + 1);
-        tft->selectTFT();
-        tft->setWindow(area->x1, area->y1, area->x2, area->y2);
-        tft->pushColorsDMA((uint16_t *)&color_p->full, w * h);
-    }
-}
-
-void lv_dma_onComplete_cb()
-{
-    lv_disp_flush_ready(&disp_drv);
-    tft->dmaClearIRQ();
-}
-
-void lv_input_touch_cb(lv_indev_drv_t *indev_driver, lv_indev_data_t *data)
-{
-    TouchCoordinate tc;
-    tft->sampleTouch(tc);
-    if (!tc.touched)
-        data->state = LV_INDEV_STATE_REL;
-    else
-    {
-        data->state = LV_INDEV_STATE_PR;
-        data->point.x = tc.x;
-        data->point.y = tc.y;
-    }
 }

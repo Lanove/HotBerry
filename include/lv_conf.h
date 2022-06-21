@@ -361,9 +361,9 @@
 #define LV_FONT_MONTSERRAT_16 1
 #define LV_FONT_MONTSERRAT_18 0
 #define LV_FONT_MONTSERRAT_20 1
-#define LV_FONT_MONTSERRAT_22 0
+#define LV_FONT_MONTSERRAT_22 1
 #define LV_FONT_MONTSERRAT_24 1
-#define LV_FONT_MONTSERRAT_26 0
+#define LV_FONT_MONTSERRAT_26 1
 #define LV_FONT_MONTSERRAT_28 0
 #define LV_FONT_MONTSERRAT_30 0
 #define LV_FONT_MONTSERRAT_32 0
@@ -567,7 +567,7 @@
 #if LV_USE_THEME_DEFAULT
 
     /*0: Light mode; 1: Dark mode*/
-    #define LV_THEME_DEFAULT_DARK 0
+    #define LV_THEME_DEFAULT_DARK 1
 
     /*1: Enable grow on press*/
     #define LV_THEME_DEFAULT_GROW 1
