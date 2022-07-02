@@ -7,7 +7,6 @@ project(lv_app)
 
 file(GLOB FILES ./*.cpp ./*.c ./*.h)
 add_library(lv_app ${FILES})
-
 target_include_directories(lv_app PUBLIC ./)
 
 target_link_libraries(lv_app PRIVATE

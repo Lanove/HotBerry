@@ -32,6 +32,7 @@ add_subdirectory(lib/ili9486_drivers)
 add_subdirectory(lib/MAX6675)
 add_subdirectory(lib/movingAvg)
 add_subdirectory(lib/lv_app)
+add_subdirectory(lib/AT24Cxx)
 
 # Add the standard library to the build
 target_link_libraries(HotBerry pico_stdlib)

@@ -19,13 +19,14 @@ ili9486_drivers *tft;
 
 void init_display()
 {
-    tft = new ili9486_drivers(tft_dataPins, TFT_RST, TFT_CS, TFT_RS, TFT_WR, TFT_RD, TOUCH_XP, TOUCH_XM, TOUCH_YP, TOUCH_YM, TOUCH_XP_ADC_CHANNEL, TOUCH_YM_ADC_CHANNEL);
+    tft = new ili9486_drivers(tft_dataPins, TFT_RST, TFT_CS, TFT_RS, TFT_WR, TFT_RD, TOUCH_XP, TOUCH_XM, TOUCH_YP,
+                              TOUCH_YM, TOUCH_XP_ADC_CHANNEL, TOUCH_YM_ADC_CHANNEL);
     tft->init();
     tft->setRotation(INVERTED_LANDSCAPE);
-    tft->dmaInit([]()
-                 {
+    tft->dmaInit([]() {
         lv_disp_flush_ready(&lv_display_device);
-        tft->dmaClearIRQ(); });
+        tft->dmaClearIRQ();
+    });
 
     lv_init();
 
@@ -47,10 +48,11 @@ void init_display()
     lv_indev_drv_register(&lv_input_device);
 
     add_repeating_timer_ms(
-        5, [](struct repeating_timer *t) -> bool
-        {
-    lv_tick_inc(5);
-    return true; },
+        5,
+        [](struct repeating_timer *t) -> bool {
+            lv_tick_inc(5);
+            return true;
+        },
         NULL, &lv_tick_timer);
 }
 
@@ -70,12 +72,7 @@ void lv_input_touch_cb(lv_indev_drv_t *indev_driver, lv_indev_data_t *data)
 {
     TouchCoordinate tc;
     tft->sampleTouch(tc);
-    if (!tc.touched)
-        data->state = LV_INDEV_STATE_REL;
-    else
-    {
-        data->state = LV_INDEV_STATE_PR;
-        data->point.x = tc.x;
-        data->point.y = tc.y;
-    }
+    data->state = tc.touched ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+    data->point.x = tc.x;
+    data->point.y = tc.y;
 }

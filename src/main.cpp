@@ -92,7 +92,61 @@ int main()
     therm = new MAX6675(THERM_DATA, THERM_SCK, THERM_CS);
     therm->init();
     init_display();
+
+    // Read-only pointers
+    static uint32_t bottomHeaterPV = 0;
+    static uint32_t topHeaterPV = 0;
+    static uint32_t secondsRunning = 0;
+
+    // Read and write pointers
+    static uint32_t bottomHeaterSV = 100;
+    static uint32_t topHeaterSV = 150;
+    static bool startedAuto;
+    static bool startedManual;
+    static float topHeaterP = 0.1;
+    static float topHeaterI = 0.2;
+    static float topHeaterD = 0.3;
+    static float bottomHeaterP = 0.4;
+    static float bottomHeaterI = 0.5;
+    static float bottomHeaterD = 0.6;
+    static uint8_t selectedProfile = 0;
+    static Profile profileLists[10];
+
+    {
+        using namespace lv_app_pointers;
+
+        pBottomHeaterPV = &bottomHeaterPV;
+        pTopHeaterPV = &topHeaterPV;
+        pSecondsRunning = &secondsRunning;
+
+        pBottomHeaterSV = &bottomHeaterSV;
+        pTopHeaterSV = &topHeaterSV;
+        pStartedAuto = &startedAuto;
+        pStartedManual = &startedManual;
+        pTopHeaterPID[0] = &topHeaterP;
+        pTopHeaterPID[1] = &topHeaterI;
+        pTopHeaterPID[2] = &topHeaterD;
+        pBottomHeaterPID[0] = &bottomHeaterP;
+        pBottomHeaterPID[1] = &bottomHeaterI;
+        pBottomHeaterPID[2] = &bottomHeaterD;
+        pSelectedProfile = &selectedProfile;
+        pProfileLists = &profileLists;
+
+        (*pProfileLists)[0].dataPoint = 9;
+        float ttemp[] = {30, 200, 200, 215, 215, 230, 240, 250, 0};
+        int tsec[] = {0, 30, 90, 100, 130, 140, 170, 200, 220};
+        (*pProfileLists)[0].startTopHeaterAt = 2;
+        for (int i = 1; i < 10; i++)
+            (*pProfileLists)[i].dataPoint = i;
+        for (int i = 0; i < (*pProfileLists)[0].dataPoint; i++)
+        {
+            (*pProfileLists)[0].targetTemperature[i] = ttemp[i];
+            (*pProfileLists)[0].targetSecond[i] = tsec[i];
+        }
+    }
+
     lv_app_entry();
+    // lv_demo_widgets();
     while (true)
     {
         uint16_t therm_adc = therm->sample();
@@ -102,7 +156,21 @@ int main()
             printf("raw %.2f avg %.2fC\n", therm->toCelcius(therm_adc), therm->toCelcius(avg));
         }
         lv_task_handler();
-        sleep_ms(1);
+
+
+        static int counter = 0;
+        counter++;
+        if (counter >= 200)
+        {
+            counter = 0;
+            topHeaterPV = rand() % (100 + 1);
+            bottomHeaterPV = rand() % (100 + 1);
+            if (startedAuto || startedManual)
+            {
+                secondsRunning++;
+            }
+        }
+        sleep_ms(5);
     }
     return 0;
 }
