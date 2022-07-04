@@ -34,6 +34,6 @@ class AT24C16
     uint8_t byteRead(uint16_t srcAddress);
   private:
     i2c_inst_t *i2c_inst;
-    void writeBuffer(uint16_t address, const uint8_t *src, uint8_t len);
+    void pageWrite(uint16_t address, const uint8_t *src, uint8_t len);
 };
 #endif

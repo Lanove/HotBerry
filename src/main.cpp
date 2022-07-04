@@ -1,17 +1,16 @@
-#include "globals.h"
-#include "lv_drivers.h"
-#include "hardware/pll.h"
-#include "hardware/clocks.h"
-#include "hardware/structs/pll.h"
-#include "hardware/structs/clocks.h"
-#include "hardware/structs/rosc.h"
-#include "hardware/adc.h"
-#include <tusb.h>
-#include "lvgl.h"
-#include "demos/lv_demos.h"
 #include "MAX6675.h"
-#include "movingAvg.h"
+#include "globals.h"
+#include "hardware/adc.h"
+#include "hardware/clocks.h"
+#include "hardware/pll.h"
+#include "hardware/structs/clocks.h"
+#include "hardware/structs/pll.h"
+#include "hardware/structs/rosc.h"
 #include "lv_app.h"
+#include "lv_drivers.h"
+#include "lvgl.h"
+#include "movingAvg.h"
+#include <tusb.h>
 
 #define HIGH 1
 #define LOW 0
@@ -57,7 +56,7 @@ int main()
     static bool startedManual;
     static float topHeaterPID[3];
     static float bottomHeaterPID[3];
-    static uint8_t selectedProfile = 0;
+    static uint16_t selectedProfile = 0;
     static Profile profileLists[10];
 
     {
@@ -75,18 +74,6 @@ int main()
         pBottomHeaterPID = &bottomHeaterPID;
         pSelectedProfile = &selectedProfile;
         pProfileLists = &profileLists;
-
-        (*pProfileLists)[0].dataPoint = 9;
-        float ttemp[] = {30, 200, 200, 215, 215, 230, 240, 250, 0};
-        int tsec[] = {0, 30, 90, 100, 130, 140, 170, 200, 220};
-        (*pProfileLists)[0].startTopHeaterAt = 2;
-        for (int i = 1; i < 10; i++)
-            (*pProfileLists)[i].dataPoint = i;
-        for (int i = 0; i < (*pProfileLists)[0].dataPoint; i++)
-        {
-            (*pProfileLists)[0].targetTemperature[i] = ttemp[i];
-            (*pProfileLists)[0].targetSecond[i] = tsec[i];
-        }
     }
 
     lv_app_entry();

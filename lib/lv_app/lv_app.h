@@ -6,9 +6,9 @@
 #include "lvgl.h"
 #include <stdio.h>
 #include <string>
-#include <unistd.h>
 
 #ifdef PICO_BOARD
+#include "pico/stdlib.h"
 #include <AT24C16.h>
 #include "globals.h"
 extern AT24C16 EEPROM;
@@ -55,7 +55,7 @@ extern uint32_t *pSecondsRunning;
 
 // Read and write pointers
 extern Profile (*pProfileLists)[10];
-extern uint8_t *pSelectedProfile;
+extern uint16_t *pSelectedProfile;
 extern uint32_t *pBottomHeaterSV;
 extern uint32_t *pTopHeaterSV;
 extern float (*pTopHeaterPID)[3];

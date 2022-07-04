@@ -25,7 +25,7 @@ uint32_t *pTopHeaterSV;
 bool *pStartedAuto;
 bool *pStartedManual;
 float (*pTopHeaterPID)[3];
-uint8_t *pSelectedProfile;
+uint16_t *pSelectedProfile;
 float (*pBottomHeaterPID)[3];
 Profile (*pProfileLists)[10];
 } // namespace lv_app_pointers
@@ -367,46 +367,16 @@ void lv_app_entry()
     app_home(hotberry_fadein_dur + hotberry_stay_dur + hotberry_fadeout_dur);
 
     INIT_CRITICAL_SECTION;
-
 #ifdef PICO_BOARD
-    if (EEPROM.init(i2c_default, I2C0_SDA, I2C0_SCL, 400 * 1000))
+    if (EEPROM.init(i2c_default, 0, 1, 400 * 1000))
         printf("EEPROM detected!\n");
     else
         printf("EEPROM Not detected!\n");
 
-    /*
-    float tpid[] = {1.2, 3.4, 4.5};
-    float bpid[] = {2.1, 4.3, 5.4};
-    Profile jajal[10];
-    for (int i = 0; i < 10; i++)
-    {
-        jajal[i].dataPoint = i;
-        jajal[i].startTopHeaterAt = i;
-        for (int x = 0; x < 20; x++)
-        {
-            jajal[i].targetSecond[x] = i * 20 + x;
-            jajal[i].targetTemperature[x] = i * 20 + x;
-        }
-    }*/
-
     EEPROM.memRead(sizeof(*pProfileLists), *pTopHeaterPID, sizeof(*pTopHeaterPID));
     EEPROM.memRead(sizeof(*pProfileLists) + sizeof(*pTopHeaterPID), *pBottomHeaterPID, sizeof(*pBottomHeaterPID));
-    // EEPROM.memRead(0, *pProfileLists, sizeof(*pProfileLists));
-    printf("topHeater P %.2f I %.2f D %.2f\n", (*pTopHeaterPID)[0], (*pTopHeaterPID)[1], (*pTopHeaterPID)[2]);
-    printf("bottomHeater P %.2f I %.2f D %.2f\n", (*pBottomHeaterPID)[0], (*pBottomHeaterPID)[1],
-           (*pBottomHeaterPID)[2]);
-    for (int i = 0; i < 10; i++)
-    {
-        printf("i %d dataPoint %d startTopHeaterAt %d\n", i, (*pProfileLists)[i].dataPoint,
-               (*pProfileLists)[i].startTopHeaterAt);
-        for (int x = 0; x < 20; x++)
-        {
-            printf("x %d targetSecond %d targetTemperature %d\n", x, (*pProfileLists)[i].targetSecond[x],
-                   (*pProfileLists)[i].targetTemperature[x]);
-        }
-    }
+    EEPROM.memRead(0, *pProfileLists, sizeof(*pProfileLists));
 #endif
-
     lv_timer_create(
         [](_lv_timer_t *e) {
             static uint32_t lastSecond = 0;
@@ -565,7 +535,6 @@ void app_auto(uint32_t delay)
         LV_EVENT_CLICKED, NULL);
 
     lv_obj_t *profile_btn = lv_btn_create(scr_auto);
-    profile_wpd.issuer = profile_btn;
     lv_obj_set_size(profile_btn, 100, 30);
     lv_obj_set_style_radius(profile_btn, 2, 0);
     lv_obj_t *profile_btn_label = lvc_btn_init(profile_btn, "", LV_ALIGN_TOP_RIGHT, -3,
@@ -579,10 +548,12 @@ void app_auto(uint32_t delay)
     lv_obj_add_event_cb(
         profile_btn,
         [](lv_event_t *e) {
+            lv_obj_t *profile_btn = lv_event_get_target(e);
             ENTER_CRITICAL_SECTION;
             bool started = *pStartedAuto;
             uint8_t dSelectedProfile = *pSelectedProfile;
             profile_wpd.param = pSelectedProfile;
+            profile_wpd.issuer = profile_btn;
             EXIT_CRITICAL_SECTION;
             if (started)
             {
@@ -1056,6 +1027,13 @@ void app_profiles(uint32_t delay)
             ENTER_CRITICAL_SECTION;
             memcpy(&(*pProfileLists)[*pSelectedProfile], &tempProfile, sizeof(Profile));
             EXIT_CRITICAL_SECTION;
+
+#ifdef PICO_BOARD
+printf("writing profile settings\n");
+            EEPROM.memWrite(0, *pProfileLists, sizeof(*pProfileLists));
+printf("writing profile settings done\n");
+
+#endif
         },
         LV_EVENT_CLICKED, NULL);
 
@@ -1257,6 +1235,13 @@ void app_settings(uint32_t delay)
                 (*pBottomHeaterPID)[i] = bval;
                 ENTER_CRITICAL_SECTION;
             }
+#ifdef PICO_BOARD
+printf("writing pid settings\n");
+            EEPROM.memWrite(sizeof(*pProfileLists), *pTopHeaterPID, sizeof(*pTopHeaterPID));
+            EEPROM.memWrite(sizeof(*pProfileLists) + sizeof(*pTopHeaterPID), *pBottomHeaterPID,
+                           sizeof(*pBottomHeaterPID));
+printf("done\n");
+#endif
             for (uint32_t i = 0; i < lv_obj_get_child_cnt(scr_settings); i++)
             {
                 lv_obj_t *child = lv_obj_get_child(scr_settings, i);

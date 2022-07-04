@@ -20,7 +20,8 @@
       "array": "cpp",
       "string": "cpp",
       "string_view": "cpp",
-      "cstddef": "cpp"
+      "cstddef": "cpp",
+      "random": "cpp"
     },
     "C_Cpp.clang_format_style": "Microsoft"
 }

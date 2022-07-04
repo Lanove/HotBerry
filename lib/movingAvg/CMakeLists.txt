@@ -9,7 +9,7 @@ pico_sdk_init()
 project(movingAvg)
 
 file(GLOB FILES ./*.cpp ./*.h)
-add_library(movingAvg ${FILES})
+add_library(movingAvg STATIC ${FILES})
 
 # Add the standard library to the build
 target_link_libraries(movingAvg PRIVATE

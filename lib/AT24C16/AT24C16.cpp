@@ -55,7 +55,7 @@ void AT24C16::memWrite(uint16_t destAddress, const void *src, size_t len)
     if (pageOffset > 0)
     {
         notAlignedLength = AT24C16_PageSize - pageOffset;
-        writeBuffer(destAddress, p_data, notAlignedLength);
+        pageWrite(destAddress, p_data, notAlignedLength);
         len -= notAlignedLength;
     }
 
@@ -68,7 +68,7 @@ void AT24C16::memWrite(uint16_t destAddress, const void *src, size_t len)
         uint8_t pageCount = len / AT24C16_PageSize;
         for (uint8_t i = 0; i < pageCount; i++)
         {
-            writeBuffer(destAddress, p_data, AT24C16_PageSize);
+            pageWrite(destAddress, p_data, AT24C16_PageSize);
             destAddress += AT24C16_PageSize;
             p_data += AT24C16_PageSize;
             len -= AT24C16_PageSize;
@@ -77,7 +77,7 @@ void AT24C16::memWrite(uint16_t destAddress, const void *src, size_t len)
         if (len > 0)
         {
             // Write remaining uncomplete bytes.
-            writeBuffer(destAddress, p_data, AT24C16_PageSize);
+            pageWrite(destAddress, p_data, AT24C16_PageSize);
         }
     }
 }
@@ -131,9 +131,9 @@ uint8_t AT24C16::byteRead(uint16_t srcAddress)
  * @param src 
  * @param len 
  */
-void AT24C16::writeBuffer(uint16_t address, const uint8_t *src, uint8_t len)
+void AT24C16::pageWrite(uint16_t address, const uint8_t *src, uint8_t len)
 {
-    if(len == 0)
+    if(len == 0 || len > 16)
         return;
     const uint8_t *src_b = src;
     uint8_t wordAddress = address & 0xFF;

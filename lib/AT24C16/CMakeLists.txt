@@ -9,10 +9,10 @@ pico_sdk_init()
 project(AT24C16)
 
 file(GLOB FILES ./*.cpp ./*.h)
-add_library(AT24C16 ${FILES})
+add_library(AT24C16 STATIC ${FILES})
 
 # Add the standard library to the build
-target_link_libraries(AT24C16 PRIVATE
+target_link_libraries(AT24C16 PUBLIC
     pico_stdlib
     hardware_i2c
     )

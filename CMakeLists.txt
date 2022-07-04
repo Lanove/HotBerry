@@ -36,7 +36,7 @@ add_subdirectory(lib/AT24C16)
 
 target_link_directories(HotBerry PRIVATE ./include)
 
-target_link_libraries(HotBerry PRIVATE
+target_link_libraries(HotBerry
     pico_stdlib
     pico_bootsel_via_double_reset
     hardware_clocks
@@ -44,11 +44,9 @@ target_link_libraries(HotBerry PRIVATE
     hardware_i2c
     ili9486_drivers
     MAX6675
-    AT24C16
     lv_app
     lvgl
     lvgl::lvgl
-    lvgl::demos
     movingAvg
 )
 

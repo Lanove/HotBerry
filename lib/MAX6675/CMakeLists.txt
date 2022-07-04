@@ -9,7 +9,7 @@ pico_sdk_init()
 project(MAX6675)
 
 file(GLOB FILES ./*.cpp ./*.h)
-add_library(MAX6675 ${FILES})
+add_library(MAX6675 STATIC ${FILES})
 
 # Add the standard library to the build
 target_link_libraries(MAX6675 PRIVATE
