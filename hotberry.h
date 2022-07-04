@@ -34,15 +34,15 @@
 
 //------------- I2C -------------//
 #ifndef PICO_DEFAULT_I2C
-#define PICO_DEFAULT_I2C 1
+#define PICO_DEFAULT_I2C 0
 #endif
 
 #ifndef PICO_DEFAULT_I2C_SDA_PIN
-#define PICO_DEFAULT_I2C_SDA_PIN 2
+#define PICO_DEFAULT_I2C_SDA_PIN 0
 #endif
 
 #ifndef PICO_DEFAULT_I2C_SCL_PIN
-#define PICO_DEFAULT_I2C_SCL_PIN 3
+#define PICO_DEFAULT_I2C_SCL_PIN 1
 #endif
 
 //------------- SPI -------------//

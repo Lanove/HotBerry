@@ -1,23 +1,26 @@
 #include "globals.h"
-#include "lv_drivers.h"
-#include "hardware/pll.h"
-#include "hardware/clocks.h"
-#include "hardware/structs/pll.h"
-#include "hardware/structs/clocks.h"
-#include "hardware/structs/rosc.h"
+// #include "lv_drivers.h"
 #include "hardware/adc.h"
+#include "hardware/clocks.h"
+#include "hardware/i2c.h"
+#include "hardware/pll.h"
+#include "hardware/structs/clocks.h"
+#include "hardware/structs/pll.h"
+#include "hardware/structs/rosc.h"
+#include "pico/binary_info.h"
 #include <tusb.h>
-#include "lvgl.h"
-#include "demos/lv_demos.h"
+// #include "lvgl.h"
 #include "MAX6675.h"
 #include "movingAvg.h"
-#include "lv_app.h"
+// #include "lv_app.h"
+#include "AT24C16.h"
 
 #define HIGH 1
 #define LOW 0
 
 MAX6675 *therm;
 movingAvg temperature_raw(10);
+AT24C16 EEPROM;
 
 void shiftData8(uint8_t data)
 {
@@ -76,12 +79,19 @@ uint32_t rnd_whitened(void)
     return random;
 }
 
+// I2C reserves some addresses for special purposes. We exclude these from the scan.
+// These are any addresses of the form 000 0xxx or 111 1xxx
+bool reserved_addr(uint8_t addr)
+{
+    return (addr & 0x78) == 0 || (addr & 0x78) == 0x78;
+}
+
 int main()
 {
     uint32_t freq_mhz = 250;
     stdio_init_all();
-    // while (!tud_cdc_connected())
-        // sleep_ms(100);
+    while (!tud_cdc_connected())
+        sleep_ms(100);
     printf("tud_cdc_connected()\n");
     if (!set_sys_clock_khz(freq_mhz * 1000, false))
         printf("system clock %dMHz failed\n", freq_mhz);
@@ -91,29 +101,32 @@ int main()
     temperature_raw.begin();
     therm = new MAX6675(THERM_DATA, THERM_SCK, THERM_CS);
     therm->init();
-    init_display();
-
-    // Read-only pointers
-    static uint32_t bottomHeaterPV = 0;
-    static uint32_t topHeaterPV = 0;
-    static uint32_t secondsRunning = 0;
-
-    // Read and write pointers
-    static uint32_t bottomHeaterSV = 100;
-    static uint32_t topHeaterSV = 150;
-    static bool startedAuto;
-    static bool startedManual;
-    static float topHeaterP = 0.1;
-    static float topHeaterI = 0.2;
-    static float topHeaterD = 0.3;
-    static float bottomHeaterP = 0.4;
-    static float bottomHeaterI = 0.5;
-    static float bottomHeaterD = 0.6;
-    static uint8_t selectedProfile = 0;
-    static Profile profileLists[10];
-
+    if (EEPROM.init(i2c_default, I2C0_SDA, I2C0_SCL, 400 * 1000))
+        printf("EEPROM detected!\n");
+    else
+        printf("EEPROM Not detected!\n");
+    /*
     {
         using namespace lv_app_pointers;
+
+        // Read-only pointers
+        static uint32_t bottomHeaterPV = 0;
+        static uint32_t topHeaterPV = 0;
+        static uint32_t secondsRunning = 0;
+
+        // Read and write pointers
+        static uint32_t bottomHeaterSV = 100;
+        static uint32_t topHeaterSV = 150;
+        static bool startedAuto;
+        static bool startedManual;
+        static float topHeaterP = 0.1;
+        static float topHeaterI = 0.2;
+        static float topHeaterD = 0.3;
+        static float bottomHeaterP = 0.4;
+        static float bottomHeaterI = 0.5;
+        static float bottomHeaterD = 0.6;
+        static uint8_t selectedProfile = 0;
+        static Profile profileLists[10];
 
         pBottomHeaterPV = &bottomHeaterPV;
         pTopHeaterPV = &topHeaterPV;
@@ -144,11 +157,24 @@ int main()
             (*pProfileLists)[0].targetSecond[i] = tsec[i];
         }
     }
-
-    lv_app_entry();
-    // lv_demo_widgets();
+*/
+    uint8_t bruh[2048];
+    uint8_t broo[2048];
+    for (int i = 0; i < sizeof(bruh); i++)
+    {
+        bruh[i] = i;
+    }
+    // EEPROM.memWrite(0,bruh,sizeof(bruh));
+    EEPROM.memRead(0, broo, sizeof(broo));
+    for (int i = 0; i < sizeof(broo); i++)
+    {
+        printf("%d broo %d\n", i, broo[i]);
+    }
+    // sizeof
+    // lv_app_entry();
     while (true)
     {
+        /*
         uint16_t therm_adc = therm->sample();
         if (therm_adc != 0xFFFF && therm_adc != 0xFFFE)
         {
@@ -156,7 +182,6 @@ int main()
             printf("raw %.2f avg %.2fC\n", therm->toCelcius(therm_adc), therm->toCelcius(avg));
         }
         lv_task_handler();
-
 
         static int counter = 0;
         counter++;
@@ -170,7 +195,8 @@ int main()
                 secondsRunning++;
             }
         }
-        sleep_ms(5);
+        */
+        sleep_ms(1000);
     }
     return 0;
 }

@@ -25,7 +25,7 @@
 static constexpr uint16_t touch_xPlateResistance = 241; // Measured resistance between XP and XM
 static constexpr uint16_t touch_zPressureMin = 20;
 static constexpr uint16_t touch_zPressureMax = 1400;
-static constexpr uint16_t touch_xADCMax = 3560;
+static constexpr uint16_t touch_xADCMax = 3500;
 static constexpr uint16_t touch_xADCMin = 370;
 static constexpr uint16_t touch_yADCMax = 3270;
 static constexpr uint16_t touch_yADCMin = 720;

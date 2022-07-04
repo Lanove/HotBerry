@@ -19,7 +19,8 @@
       "adc.h": "c",
       "array": "cpp",
       "string": "cpp",
-      "string_view": "cpp"
+      "string_view": "cpp",
+      "cstddef": "cpp"
     },
     "C_Cpp.clang_format_style": "Microsoft"
 }

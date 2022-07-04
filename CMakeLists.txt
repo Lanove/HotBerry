@@ -16,7 +16,7 @@ pico_sdk_init()
 # Add executable. Default name is the project name, version 0.1
 add_executable(HotBerry
     src/main.cpp
-    src/lv_drivers.cpp
+    # src/lv_drivers.cpp
 )
 
 pico_set_program_name(HotBerry "HotBerry")
@@ -32,7 +32,7 @@ add_subdirectory(lib/ili9486_drivers)
 add_subdirectory(lib/MAX6675)
 add_subdirectory(lib/movingAvg)
 add_subdirectory(lib/lv_app)
-add_subdirectory(lib/AT24Cxx)
+add_subdirectory(lib/AT24C16)
 
 # Add the standard library to the build
 target_link_libraries(HotBerry pico_stdlib)
@@ -44,8 +44,10 @@ target_link_libraries(HotBerry
     pico_bootsel_via_double_reset
     hardware_clocks
     hardware_adc
+    hardware_i2c
     ili9486_drivers
     MAX6675
+    AT24C16
     lv_app
     lvgl
     lvgl::lvgl
