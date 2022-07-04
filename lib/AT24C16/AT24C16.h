@@ -22,7 +22,6 @@
 #define _AT24Cxx_H_
 
 static constexpr uint8_t AT24C16_PageSize = 16;
-static constexpr uint16_t AT24C16_Size = 16384;
 static constexpr uint8_t AT24C16_i2cAddress = 0x50;
 
 class AT24C16
@@ -33,8 +32,6 @@ class AT24C16
     void memRead(uint16_t srcAddress, void *dest, size_t len);
     void byteWrite(uint16_t destAddress, uint8_t byte);
     uint8_t byteRead(uint16_t srcAddress);
-    void writePage(uint16_t address, const uint8_t *src, size_t len);
-
   private:
     i2c_inst_t *i2c_inst;
     void writeBuffer(uint16_t address, const uint8_t *src, uint8_t len);

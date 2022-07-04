@@ -40,7 +40,7 @@ bool AT24C16::init(i2c_inst_t *_i2c, uint sda, uint scl, uint32_t speed)
 }
 
 /**
- * @brief Write memory with specific length to destination address on EEPROM
+ * @brief Write memory with specific length to destination address on EEPROM, whole 2048 bytes write takes around ~900ms
  * 
  * @param destAddress 
  * @param src source memory pointer to write to EEPROM
@@ -55,7 +55,7 @@ void AT24C16::memWrite(uint16_t destAddress, const void *src, size_t len)
     if (pageOffset > 0)
     {
         notAlignedLength = AT24C16_PageSize - pageOffset;
-        writePage(destAddress, p_data, notAlignedLength);
+        writeBuffer(destAddress, p_data, notAlignedLength);
         len -= notAlignedLength;
     }
 
@@ -68,7 +68,7 @@ void AT24C16::memWrite(uint16_t destAddress, const void *src, size_t len)
         uint8_t pageCount = len / AT24C16_PageSize;
         for (uint8_t i = 0; i < pageCount; i++)
         {
-            writePage(destAddress, p_data, AT24C16_PageSize);
+            writeBuffer(destAddress, p_data, AT24C16_PageSize);
             destAddress += AT24C16_PageSize;
             p_data += AT24C16_PageSize;
             len -= AT24C16_PageSize;
@@ -76,14 +76,14 @@ void AT24C16::memWrite(uint16_t destAddress, const void *src, size_t len)
 
         if (len > 0)
         {
-            // Write remaining uncomplete page.
-            writePage(destAddress, p_data, AT24C16_PageSize);
+            // Write remaining uncomplete bytes.
+            writeBuffer(destAddress, p_data, AT24C16_PageSize);
         }
     }
 }
 
 /**
- * @brief Read memory from EEPROM and save it to passed pointer
+ * @brief Read memory from EEPROM and save it to passed pointer, whole 2048 bytes read takes around ~52ms
  * 
  * @param srcAddress EEPROM Address to read from
  * @param dest Destination memory pointer to be written from EEPROM
@@ -149,25 +149,4 @@ void AT24C16::writeBuffer(uint16_t address, const uint8_t *src, uint8_t len)
     // Note: 1. The write cycle time tWR is the time from a valid stop condition of a write sequence to the end of the
     // internal clear/write cycle
     sleep_ms(7);
-}
-
-void AT24C16::writePage(uint16_t address, const uint8_t *src, size_t len)
-{
-    const uint8_t *src_b = src;
-    static constexpr uint8_t AT24C16_Write_Max_Len = 16;
-    if (len > 256)
-        len = 256;
-
-    uint8_t bufferCount = len / AT24C16_Write_Max_Len;
-
-    for (uint8_t i = 0; i < bufferCount; i++)
-    {
-        uint16_t offset = i * AT24C16_Write_Max_Len;
-        writeBuffer(address + offset, src_b + offset, AT24C16_Write_Max_Len);
-    }
-
-    // Write remaining bytes.
-    uint16_t remainingBytes = len % AT24C16_Write_Max_Len;
-    uint16_t offset = len - remainingBytes;
-    writeBuffer(address + offset, src + offset, remainingBytes);
 }

@@ -1,26 +1,23 @@
 #include "globals.h"
-// #include "lv_drivers.h"
-#include "hardware/adc.h"
-#include "hardware/clocks.h"
-#include "hardware/i2c.h"
+#include "lv_drivers.h"
 #include "hardware/pll.h"
-#include "hardware/structs/clocks.h"
+#include "hardware/clocks.h"
 #include "hardware/structs/pll.h"
+#include "hardware/structs/clocks.h"
 #include "hardware/structs/rosc.h"
-#include "pico/binary_info.h"
+#include "hardware/adc.h"
 #include <tusb.h>
-// #include "lvgl.h"
+#include "lvgl.h"
+#include "demos/lv_demos.h"
 #include "MAX6675.h"
 #include "movingAvg.h"
-// #include "lv_app.h"
-#include "AT24C16.h"
+#include "lv_app.h"
 
 #define HIGH 1
 #define LOW 0
 
 MAX6675 *therm;
 movingAvg temperature_raw(10);
-AT24C16 EEPROM;
 
 void shiftData8(uint8_t data)
 {
@@ -34,99 +31,37 @@ void shiftData8(uint8_t data)
     }
 }
 
-void measure_freqs(void)
-{
-    uint f_pll_sys = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_PLL_SYS_CLKSRC_PRIMARY);
-    uint f_pll_usb = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_PLL_USB_CLKSRC_PRIMARY);
-    uint f_rosc = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_ROSC_CLKSRC);
-    uint f_clk_sys = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_SYS);
-    uint f_clk_peri = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_PERI);
-    uint f_clk_usb = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_USB);
-    uint f_clk_adc = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_ADC);
-    uint f_clk_rtc = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_RTC);
-
-    printf("pll_sys  = %dkHz\n", f_pll_sys);
-    printf("pll_usb  = %dkHz\n", f_pll_usb);
-    printf("rosc     = %dkHz\n", f_rosc);
-    printf("clk_sys  = %dkHz\n", f_clk_sys);
-    printf("clk_peri = %dkHz\n", f_clk_peri);
-    printf("clk_usb  = %dkHz\n", f_clk_usb);
-    printf("clk_adc  = %dkHz\n", f_clk_adc);
-    printf("clk_rtc  = %dkHz\n", f_clk_rtc);
-
-    // Can't measure clk_ref / xosc as it is the ref
-}
-
-uint32_t rnd_whitened(void)
-{
-    int k, random = 0;
-    int random_bit1, random_bit2;
-    volatile uint32_t *rnd_reg = (uint32_t *)(ROSC_BASE + ROSC_RANDOMBIT_OFFSET);
-
-    for (k = 0; k < 32; k++)
-    {
-        while (1)
-        {
-            random_bit1 = 0x00000001 & (*rnd_reg);
-            random_bit2 = 0x00000001 & (*rnd_reg);
-            if (random_bit1 != random_bit2)
-                break;
-        }
-
-        random = random << 1;
-        random = random + random_bit1;
-    }
-    return random;
-}
-
-// I2C reserves some addresses for special purposes. We exclude these from the scan.
-// These are any addresses of the form 000 0xxx or 111 1xxx
-bool reserved_addr(uint8_t addr)
-{
-    return (addr & 0x78) == 0 || (addr & 0x78) == 0x78;
-}
-
 int main()
 {
-    uint32_t freq_mhz = 250;
     stdio_init_all();
     while (!tud_cdc_connected())
         sleep_ms(100);
-    printf("tud_cdc_connected()\n");
-    if (!set_sys_clock_khz(freq_mhz * 1000, false))
-        printf("system clock %dMHz failed\n", freq_mhz);
+    if (!set_sys_clock_khz(cpu_freq_mhz * 1000, false))
+        printf("set system clock to %dMHz failed\n", cpu_freq_mhz);
     else
-        printf("system clock now %dMHz\n", freq_mhz);
-    measure_freqs();
+        printf("system clock is now %dMHz\n", cpu_freq_mhz);
     temperature_raw.begin();
     therm = new MAX6675(THERM_DATA, THERM_SCK, THERM_CS);
     therm->init();
-    if (EEPROM.init(i2c_default, I2C0_SDA, I2C0_SCL, 400 * 1000))
-        printf("EEPROM detected!\n");
-    else
-        printf("EEPROM Not detected!\n");
-    /*
+    init_display();
+
+    // Read-only pointers
+    static uint32_t bottomHeaterPV = 0;
+    static uint32_t topHeaterPV = 0;
+    static uint32_t secondsRunning = 0;
+
+    // Read and write pointers
+    static uint32_t bottomHeaterSV = 100;
+    static uint32_t topHeaterSV = 150;
+    static bool startedAuto;
+    static bool startedManual;
+    static float topHeaterPID[3];
+    static float bottomHeaterPID[3];
+    static uint8_t selectedProfile = 0;
+    static Profile profileLists[10];
+
     {
         using namespace lv_app_pointers;
-
-        // Read-only pointers
-        static uint32_t bottomHeaterPV = 0;
-        static uint32_t topHeaterPV = 0;
-        static uint32_t secondsRunning = 0;
-
-        // Read and write pointers
-        static uint32_t bottomHeaterSV = 100;
-        static uint32_t topHeaterSV = 150;
-        static bool startedAuto;
-        static bool startedManual;
-        static float topHeaterP = 0.1;
-        static float topHeaterI = 0.2;
-        static float topHeaterD = 0.3;
-        static float bottomHeaterP = 0.4;
-        static float bottomHeaterI = 0.5;
-        static float bottomHeaterD = 0.6;
-        static uint8_t selectedProfile = 0;
-        static Profile profileLists[10];
 
         pBottomHeaterPV = &bottomHeaterPV;
         pTopHeaterPV = &topHeaterPV;
@@ -136,12 +71,8 @@ int main()
         pTopHeaterSV = &topHeaterSV;
         pStartedAuto = &startedAuto;
         pStartedManual = &startedManual;
-        pTopHeaterPID[0] = &topHeaterP;
-        pTopHeaterPID[1] = &topHeaterI;
-        pTopHeaterPID[2] = &topHeaterD;
-        pBottomHeaterPID[0] = &bottomHeaterP;
-        pBottomHeaterPID[1] = &bottomHeaterI;
-        pBottomHeaterPID[2] = &bottomHeaterD;
+        pTopHeaterPID = &topHeaterPID;
+        pBottomHeaterPID = &bottomHeaterPID;
         pSelectedProfile = &selectedProfile;
         pProfileLists = &profileLists;
 
@@ -157,24 +88,11 @@ int main()
             (*pProfileLists)[0].targetSecond[i] = tsec[i];
         }
     }
-*/
-    uint8_t bruh[2048];
-    uint8_t broo[2048];
-    for (int i = 0; i < sizeof(bruh); i++)
-    {
-        bruh[i] = i;
-    }
-    // EEPROM.memWrite(0,bruh,sizeof(bruh));
-    EEPROM.memRead(0, broo, sizeof(broo));
-    for (int i = 0; i < sizeof(broo); i++)
-    {
-        printf("%d broo %d\n", i, broo[i]);
-    }
-    // sizeof
-    // lv_app_entry();
+
+    lv_app_entry();
+    // lv_demo_widgets();
     while (true)
     {
-        /*
         uint16_t therm_adc = therm->sample();
         if (therm_adc != 0xFFFF && therm_adc != 0xFFFE)
         {
@@ -195,8 +113,7 @@ int main()
                 secondsRunning++;
             }
         }
-        */
-        sleep_ms(1000);
+        sleep_ms(5);
     }
     return 0;
 }

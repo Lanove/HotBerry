@@ -47,4 +47,6 @@ enum IO
     UART0_RX = 17
 };
 
+static constexpr uint32_t cpu_freq_mhz = 250;
+
 #endif

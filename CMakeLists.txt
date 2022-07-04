@@ -16,7 +16,7 @@ pico_sdk_init()
 # Add executable. Default name is the project name, version 0.1
 add_executable(HotBerry
     src/main.cpp
-    # src/lv_drivers.cpp
+    src/lv_drivers.cpp
 )
 
 pico_set_program_name(HotBerry "HotBerry")

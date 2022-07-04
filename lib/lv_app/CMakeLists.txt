@@ -13,3 +13,8 @@ target_link_libraries(lv_app PRIVATE
     lvgl
     lvgl::examples
     lvgl::demos)
+
+if(PICO_BOARD)
+    message("LV_APP USES EEPROM")
+    target_link_libraries(lv_app PRIVATE AT24C16)
+endif()

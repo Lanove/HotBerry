@@ -8,6 +8,12 @@
 #include <string>
 #include <unistd.h>
 
+#ifdef PICO_BOARD
+#include <AT24C16.h>
+#include "globals.h"
+extern AT24C16 EEPROM;
+#endif
+
 #define USE_INTRO 1
 #define ENTER_CRITICAL_SECTION
 #define EXIT_CRITICAL_SECTION
@@ -23,14 +29,16 @@ LV_IMG_DECLARE(temperature_icon);
 static constexpr uint8_t profile_maximumDataPoint = 20;
 struct Profile
 {
-    uint8_t dataPoint = 0;
+    uint8_t dataPoint = 1;
     int targetTemperature[profile_maximumDataPoint];
     uint16_t targetSecond[profile_maximumDataPoint];
     uint16_t startTopHeaterAt = 0;
     Profile()
     {
-        std::fill(targetTemperature, &targetTemperature[0] + profile_maximumDataPoint, 1);
-        std::fill(targetSecond, &targetSecond[0] + profile_maximumDataPoint, 1);
+        std::fill(targetTemperature, &targetTemperature[0] + profile_maximumDataPoint, 0);
+        std::fill(targetSecond, &targetSecond[0] + profile_maximumDataPoint, 0);
+        targetTemperature[0] = 30;
+        targetSecond[0] = 0;
     }
 };
 
@@ -50,8 +58,8 @@ extern Profile (*pProfileLists)[10];
 extern uint8_t *pSelectedProfile;
 extern uint32_t *pBottomHeaterSV;
 extern uint32_t *pTopHeaterSV;
-extern float *pTopHeaterPID[3];
-extern float *pBottomHeaterPID[3];
+extern float (*pTopHeaterPID)[3];
+extern float (*pBottomHeaterPID)[3];
 extern bool *pStartedAuto;
 extern bool *pStartedManual;
 } // namespace lv_app_pointers

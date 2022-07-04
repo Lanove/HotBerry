@@ -1,11 +1,14 @@
 #include "lv_app.h"
 #include "keyboard.h"
+#ifdef PICO_BOARD
+AT24C16 EEPROM;
+#endif
 
 static constexpr uint32_t animTime = 500;
 static constexpr uint32_t animTranslationY = 150;
 static constexpr uint32_t manual_max_run_seconds = 300;
-static constexpr char *profile_roller_list = "Profile 0\nProfile 1\nProfile 2\nProfile 3\nProfile 4\nProfile "
-                                             "5\nProfile 6\nProfile 7\nProfile 8\nProfile 9";
+static constexpr const char *profile_roller_list = "Profile 0\nProfile 1\nProfile 2\nProfile 3\nProfile 4\nProfile "
+                                                   "5\nProfile 6\nProfile 7\nProfile 8\nProfile 9";
 
 namespace lv_app_pointers
 {
@@ -21,9 +24,9 @@ uint32_t *pBottomHeaterSV;
 uint32_t *pTopHeaterSV;
 bool *pStartedAuto;
 bool *pStartedManual;
-float *pTopHeaterPID[3];
+float (*pTopHeaterPID)[3];
 uint8_t *pSelectedProfile;
-float *pBottomHeaterPID[3];
+float (*pBottomHeaterPID)[3];
 Profile (*pProfileLists)[10];
 } // namespace lv_app_pointers
 using namespace lv_app_pointers;
@@ -331,7 +334,7 @@ void lv_app_entry()
 {
 #if USE_INTRO == 1
     static constexpr uint32_t hotberry_fadein_dur = 1000;
-    static constexpr uint32_t hotberry_stay_dur = 4000;
+    static constexpr uint32_t hotberry_stay_dur = 2000;
     static constexpr uint32_t hotberry_fadeout_dur = 1000;
 #else
     static constexpr uint32_t hotberry_fadein_dur = 0;
@@ -364,6 +367,45 @@ void lv_app_entry()
     app_home(hotberry_fadein_dur + hotberry_stay_dur + hotberry_fadeout_dur);
 
     INIT_CRITICAL_SECTION;
+
+#ifdef PICO_BOARD
+    if (EEPROM.init(i2c_default, I2C0_SDA, I2C0_SCL, 400 * 1000))
+        printf("EEPROM detected!\n");
+    else
+        printf("EEPROM Not detected!\n");
+
+    /*
+    float tpid[] = {1.2, 3.4, 4.5};
+    float bpid[] = {2.1, 4.3, 5.4};
+    Profile jajal[10];
+    for (int i = 0; i < 10; i++)
+    {
+        jajal[i].dataPoint = i;
+        jajal[i].startTopHeaterAt = i;
+        for (int x = 0; x < 20; x++)
+        {
+            jajal[i].targetSecond[x] = i * 20 + x;
+            jajal[i].targetTemperature[x] = i * 20 + x;
+        }
+    }*/
+
+    EEPROM.memRead(sizeof(*pProfileLists), *pTopHeaterPID, sizeof(*pTopHeaterPID));
+    EEPROM.memRead(sizeof(*pProfileLists) + sizeof(*pTopHeaterPID), *pBottomHeaterPID, sizeof(*pBottomHeaterPID));
+    // EEPROM.memRead(0, *pProfileLists, sizeof(*pProfileLists));
+    printf("topHeater P %.2f I %.2f D %.2f\n", (*pTopHeaterPID)[0], (*pTopHeaterPID)[1], (*pTopHeaterPID)[2]);
+    printf("bottomHeater P %.2f I %.2f D %.2f\n", (*pBottomHeaterPID)[0], (*pBottomHeaterPID)[1],
+           (*pBottomHeaterPID)[2]);
+    for (int i = 0; i < 10; i++)
+    {
+        printf("i %d dataPoint %d startTopHeaterAt %d\n", i, (*pProfileLists)[i].dataPoint,
+               (*pProfileLists)[i].startTopHeaterAt);
+        for (int x = 0; x < 20; x++)
+        {
+            printf("x %d targetSecond %d targetTemperature %d\n", x, (*pProfileLists)[i].targetSecond[x],
+                   (*pProfileLists)[i].targetTemperature[x]);
+        }
+    }
+#endif
 
     lv_timer_create(
         [](_lv_timer_t *e) {
@@ -402,8 +444,12 @@ void lv_app_entry()
                     lv_chart_set_all_value(ChartData::chart, ChartData::topSeries, LV_CHART_POINT_NONE);
                     lv_chart_set_all_value(ChartData::chart, ChartData::bottomSeries, LV_CHART_POINT_NONE);
                 }
-                lv_chart_set_value_by_id(ChartData::chart, ChartData::topSeries, startedAuto ? cSecondsRunning : cSecondsRunning % ChartData::totalSecond, cTopHeaterPV);
-                lv_chart_set_value_by_id(ChartData::chart, ChartData::bottomSeries, startedAuto ? cSecondsRunning : cSecondsRunning % ChartData::totalSecond, cBottomHeaterPV);
+                lv_chart_set_value_by_id(ChartData::chart, ChartData::topSeries,
+                                         startedAuto ? cSecondsRunning : cSecondsRunning % ChartData::totalSecond,
+                                         cTopHeaterPV);
+                lv_chart_set_value_by_id(ChartData::chart, ChartData::bottomSeries,
+                                         startedAuto ? cSecondsRunning : cSecondsRunning % ChartData::totalSecond,
+                                         cBottomHeaterPV);
                 lv_label_set_text_fmt(ChartData::secondsRunningLabel, "Time Running:%ds", cSecondsRunning);
                 // lv_chart_set_next_value(ChartData::chart, ChartData::topSeries, cTopHeaterPV);
                 // lv_chart_set_next_value(ChartData::chart, ChartData::bottomSeries, cBottomHeaterPV);
@@ -1029,7 +1075,7 @@ void app_profiles(uint32_t delay)
         [](lv_event_t *e) {
             static constexpr lv_coord_t row_height = 35;
             static constexpr lv_coord_t column_dsc[] = {30, LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
-            static constexpr char *grid_label_text[] = {"No.", "Target Second", "Target Temperature"};
+            static constexpr const char *grid_label_text[] = {"No.", "Target Second", "Target Temperature"};
             static lv_coord_t *row_dsc = NULL;
 
             lv_obj_t *scr_cont = (lv_obj_t *)lv_event_get_user_data(e);
@@ -1207,8 +1253,8 @@ void app_settings(uint32_t delay)
                 float tval = std::stof(lv_textarea_get_text(lv_obj_get_child(topHeater_cont, 2 * (i + 1))));
                 float bval = std::stof(lv_textarea_get_text(lv_obj_get_child(bottomHeater_cont, 2 * (i + 1))));
                 EXIT_CRITICAL_SECTION;
-                *pTopHeaterPID[i] = tval;
-                *pBottomHeaterPID[i] = bval;
+                (*pTopHeaterPID)[i] = tval;
+                (*pBottomHeaterPID)[i] = bval;
                 ENTER_CRITICAL_SECTION;
             }
             for (uint32_t i = 0; i < lv_obj_get_child_cnt(scr_settings); i++)
@@ -1250,7 +1296,7 @@ void app_settings(uint32_t delay)
             lvc_label_init(pid_label, &lv_font_montserrat_20, LV_ALIGN_TOP_LEFT, ta_x_offs[y], ta_y_offs[y]);
             lv_obj_t *pid_ta = createTextArea(cont, pidIsFloat ? 6 : 3, 100, pidIsFloat, LV_ALIGN_TOP_LEFT, 0, 0);
             ENTER_CRITICAL_SECTION;
-            sprintf(ta_buf, "%.2f", i == 0 ? *pTopHeaterPID[y] : *pBottomHeaterPID[y]);
+            sprintf(ta_buf, "%.2f", i == 0 ? (*pTopHeaterPID)[y] : (*pBottomHeaterPID)[y]);
             EXIT_CRITICAL_SECTION;
             lv_textarea_set_text(pid_ta, ta_buf);
             lv_obj_align_to(pid_ta, pid_label, LV_ALIGN_OUT_RIGHT_MID, -10 - ta_x_offs[y], 0);
