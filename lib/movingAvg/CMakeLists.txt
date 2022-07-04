@@ -12,7 +12,7 @@ file(GLOB FILES ./*.cpp ./*.h)
 add_library(movingAvg ${FILES})
 
 # Add the standard library to the build
-target_link_libraries(movingAvg
+target_link_libraries(movingAvg PRIVATE
     pico_stdlib
     )
 

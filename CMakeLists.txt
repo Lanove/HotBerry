@@ -34,13 +34,10 @@ add_subdirectory(lib/movingAvg)
 add_subdirectory(lib/lv_app)
 add_subdirectory(lib/AT24C16)
 
-# Add the standard library to the build
-target_link_libraries(HotBerry pico_stdlib)
-
 target_link_directories(HotBerry PRIVATE ./include)
 
-# Add any user requested libraries
-target_link_libraries(HotBerry
+target_link_libraries(HotBerry PRIVATE
+    pico_stdlib
     pico_bootsel_via_double_reset
     hardware_clocks
     hardware_adc

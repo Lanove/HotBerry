@@ -12,7 +12,7 @@ file(GLOB FILES ./*.cpp ./*.h)
 add_library(AT24C16 ${FILES})
 
 # Add the standard library to the build
-target_link_libraries(AT24C16
+target_link_libraries(AT24C16 PRIVATE
     pico_stdlib
     hardware_i2c
     )
