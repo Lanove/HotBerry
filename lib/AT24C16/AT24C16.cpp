@@ -19,13 +19,13 @@
 
 /**
  * @brief Initialize AT24C16 EEPROM
- * 
+ *
  * @param _i2c I2C instance used
  * @param sda SDA pin
  * @param scl SCL pin
  * @param speed Speed of the I2C bus, 100000 = 100kHz
  * @return true If init success
- * @return false 
+ * @return false
  */
 bool AT24C16::init(i2c_inst_t *_i2c, uint sda, uint scl, uint32_t speed)
 {
@@ -41,8 +41,8 @@ bool AT24C16::init(i2c_inst_t *_i2c, uint sda, uint scl, uint32_t speed)
 
 /**
  * @brief Write memory with specific length to destination address on EEPROM, whole 2048 bytes write takes around ~900ms
- * 
- * @param destAddress 
+ *
+ * @param destAddress
  * @param src source memory pointer to write to EEPROM
  * @param len length to be written
  */
@@ -58,7 +58,6 @@ void AT24C16::memWrite(uint16_t destAddress, const void *src, size_t len)
         pageWrite(destAddress, p_data, notAlignedLength);
         len -= notAlignedLength;
     }
-
     if (len > 0)
     {
         destAddress += notAlignedLength;
@@ -84,7 +83,7 @@ void AT24C16::memWrite(uint16_t destAddress, const void *src, size_t len)
 
 /**
  * @brief Read memory from EEPROM and save it to passed pointer, whole 2048 bytes read takes around ~52ms
- * 
+ *
  * @param srcAddress EEPROM Address to read from
  * @param dest Destination memory pointer to be written from EEPROM
  * @param len Length of memory to be read
@@ -98,9 +97,9 @@ void AT24C16::memRead(uint16_t srcAddress, void *dest, size_t len)
 
 /**
  * @brief Perform byte write operation on to specific address
- * 
- * @param destAddress 
- * @param byte 
+ *
+ * @param destAddress
+ * @param byte
  */
 void AT24C16::byteWrite(uint16_t destAddress, uint8_t byte)
 {
@@ -111,8 +110,8 @@ void AT24C16::byteWrite(uint16_t destAddress, uint8_t byte)
 
 /**
  * @brief Perform byte read operation from specific address
- * 
- * @param srcAddress 
+ *
+ * @param srcAddress
  * @return uint8_t Memory read from address on EEPROM
  */
 uint8_t AT24C16::byteRead(uint16_t srcAddress)
@@ -126,14 +125,14 @@ uint8_t AT24C16::byteRead(uint16_t srcAddress)
 
 /**
  * @brief Function to write chunk of 16-bytes of data to EEPROM or Page Write operation on EEPROM
- * 
- * @param address 
- * @param src 
- * @param len 
+ *
+ * @param address
+ * @param src
+ * @param len
  */
 void AT24C16::pageWrite(uint16_t address, const uint8_t *src, uint8_t len)
 {
-    if(len == 0 || len > 16)
+    if (len == 0 || len > 16)
         return;
     const uint8_t *src_b = src;
     uint8_t wordAddress = address & 0xFF;

@@ -8,10 +8,14 @@
 #include <string>
 
 #ifdef PICO_BOARD
+#include "globals.h"
 #include "pico/stdlib.h"
 #include <AT24C16.h>
-#include "globals.h"
 extern AT24C16 EEPROM;
+static constexpr uint32_t EEPROM_SDA = 0;
+static constexpr uint32_t EEPROM_SCL = 1;
+static constexpr uint32_t EEPROM_BusSpeed = 400000;
+static constexpr i2c_inst_t* EEPROM_I2CBUS = i2c_default;
 #endif
 
 #define USE_INTRO 1

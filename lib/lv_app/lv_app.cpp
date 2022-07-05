@@ -368,7 +368,7 @@ void lv_app_entry()
 
     INIT_CRITICAL_SECTION;
 #ifdef PICO_BOARD
-    if (EEPROM.init(i2c_default, 0, 1, 400 * 1000))
+    if (EEPROM.init(EEPROM_I2CBUS, EEPROM_SDA, EEPROM_SCL, EEPROM_BusSpeed))
         printf("EEPROM detected!\n");
     else
         printf("EEPROM Not detected!\n");
@@ -1027,12 +1027,11 @@ void app_profiles(uint32_t delay)
             ENTER_CRITICAL_SECTION;
             memcpy(&(*pProfileLists)[*pSelectedProfile], &tempProfile, sizeof(Profile));
             EXIT_CRITICAL_SECTION;
-
 #ifdef PICO_BOARD
-printf("writing profile settings\n");
-            EEPROM.memWrite(0, *pProfileLists, sizeof(*pProfileLists));
-printf("writing profile settings done\n");
-
+            if (EEPROM.init(EEPROM_I2CBUS, EEPROM_SDA, EEPROM_SCL, EEPROM_BusSpeed)) // For some reason, we need to always init before doing anything with I2C BUS
+                EEPROM.memWrite(0, *pProfileLists, sizeof(*pProfileLists));
+            else
+                printf("EEPROM Not detected!\n");
 #endif
         },
         LV_EVENT_CLICKED, NULL);
@@ -1236,11 +1235,15 @@ void app_settings(uint32_t delay)
                 ENTER_CRITICAL_SECTION;
             }
 #ifdef PICO_BOARD
-printf("writing pid settings\n");
-            EEPROM.memWrite(sizeof(*pProfileLists), *pTopHeaterPID, sizeof(*pTopHeaterPID));
-            EEPROM.memWrite(sizeof(*pProfileLists) + sizeof(*pTopHeaterPID), *pBottomHeaterPID,
-                           sizeof(*pBottomHeaterPID));
-printf("done\n");
+
+            if (EEPROM.init(EEPROM_I2CBUS, EEPROM_SDA, EEPROM_SCL, EEPROM_BusSpeed)) // For some reason, we need to always init before doing anything with I2C BUS
+            {
+                EEPROM.memWrite(sizeof(*pProfileLists), *pTopHeaterPID, sizeof(*pTopHeaterPID));
+                EEPROM.memWrite(sizeof(*pProfileLists) + sizeof(*pTopHeaterPID), *pBottomHeaterPID,
+                                sizeof(*pBottomHeaterPID));
+            }
+            else
+                printf("EEPROM Not detected!\n");
 #endif
             for (uint32_t i = 0; i < lv_obj_get_child_cnt(scr_settings); i++)
             {
