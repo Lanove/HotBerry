@@ -21,7 +21,15 @@
       "string": "cpp",
       "string_view": "cpp",
       "cstddef": "cpp",
-      "random": "cpp"
+      "random": "cpp",
+      "optional": "cpp",
+      "istream": "cpp",
+      "ostream": "cpp",
+      "system_error": "cpp",
+      "functional": "cpp",
+      "tuple": "cpp",
+      "type_traits": "cpp",
+      "utility": "cpp"
     },
     "C_Cpp.clang_format_style": "Microsoft"
 }

@@ -1,5 +1,19 @@
+/**
+ * @file MAX6675.cpp
+ * @author Figo Arzaki Maulana (figoarzaki123@gmail.com)
+ * @brief Simple library to interface to MAX6675 Thermocouple Type-K Sensor on RP2040
+ * @version 0.1
+ * @date 2022-07-05
+ * 
+ * @copyright Copyright (c) 2022
+ * 
+ */
 #include "MAX6675.h"
 
+/**
+ * @brief Need to be called before sampling the sensor
+ * 
+ */
 void MAX6675::init()
 {
     gpio_init(sdo);
@@ -13,11 +27,19 @@ void MAX6675::init()
     gpio_put(sck, 0);
 }
 
+/**
+ * @brief Sample sensor, will return the correct 12-bit value if sensor is ready or return 0xFFFE if sensor is not ready yet
+ * 
+ * @return uint16_t Sampled 12-bit ADC ranging from 0 to 700C or 0xFFFE if sensor is not ready
+ */
 uint16_t MAX6675::sample()
 {
     // Sampling takes 4.61uS
+
+    // The sensor typically needs 0.17s to convert next value
+    // so if last sampling time is less than conversion time we halt the sampling and return 0xFFFE instead
     uint64_t diff = absolute_time_diff_us(lastSample, get_absolute_time());
-    if (diff < MIN_SAMPLE_TIME)
+    if (diff < CONVERSION_TIME)
         return 0xFFFE;
     uint16_t resp = 0;
     /*
@@ -56,9 +78,9 @@ uint16_t MAX6675::sample()
     gpio_put(sck, 0);
     result = (resp & 0x7FF8) >> 3;
     open = resp & 0x04;
-    // exist = resp & 0x02;
-    if (open)
-        return 0xFFFF;
+    exist = resp & 0x02;
+    // if (open)
+        // return 0xFFFF;
     lastSample = get_absolute_time();
     return result;
 }

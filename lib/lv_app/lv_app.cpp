@@ -409,17 +409,23 @@ void lv_app_entry()
             }
             if (cSecondsRunning != lastSecond && ((startedAuto && cSecondsRunning <= totalSecond) || startedManual))
             {
-                if (startedManual && cSecondsRunning % ChartData::totalSecond == 0)
-                {
-                    lv_chart_set_all_value(ChartData::chart, ChartData::topSeries, LV_CHART_POINT_NONE);
-                    lv_chart_set_all_value(ChartData::chart, ChartData::bottomSeries, LV_CHART_POINT_NONE);
-                }
                 lv_chart_set_value_by_id(ChartData::chart, ChartData::topSeries,
                                          startedAuto ? cSecondsRunning : cSecondsRunning % ChartData::totalSecond,
                                          cTopHeaterPV);
                 lv_chart_set_value_by_id(ChartData::chart, ChartData::bottomSeries,
                                          startedAuto ? cSecondsRunning : cSecondsRunning % ChartData::totalSecond,
                                          cBottomHeaterPV);
+
+                if (startedManual && cSecondsRunning > ChartData::totalSecond)
+                {
+                    for (int i = 1; i <= 5; i++)
+                    {
+                        lv_chart_set_value_by_id(ChartData::chart, ChartData::topSeries,
+                                                 (cSecondsRunning % ChartData::totalSecond) + i, LV_CHART_POINT_NONE);
+                        lv_chart_set_value_by_id(ChartData::chart, ChartData::bottomSeries,
+                                                 (cSecondsRunning % ChartData::totalSecond) + i, LV_CHART_POINT_NONE);
+                    }
+                }
                 lv_label_set_text_fmt(ChartData::secondsRunningLabel, "Time Running:%ds", cSecondsRunning);
                 // lv_chart_set_next_value(ChartData::chart, ChartData::topSeries, cTopHeaterPV);
                 // lv_chart_set_next_value(ChartData::chart, ChartData::bottomSeries, cBottomHeaterPV);
@@ -1028,7 +1034,9 @@ void app_profiles(uint32_t delay)
             memcpy(&(*pProfileLists)[*pSelectedProfile], &tempProfile, sizeof(Profile));
             EXIT_CRITICAL_SECTION;
 #ifdef PICO_BOARD
-            if (EEPROM.init(EEPROM_I2CBUS, EEPROM_SDA, EEPROM_SCL, EEPROM_BusSpeed)) // For some reason, we need to always init before doing anything with I2C BUS
+            if (EEPROM.init(
+                    EEPROM_I2CBUS, EEPROM_SDA, EEPROM_SCL,
+                    EEPROM_BusSpeed)) // For some reason, we need to always init before doing anything with I2C BUS
                 EEPROM.memWrite(0, *pProfileLists, sizeof(*pProfileLists));
             else
                 printf("EEPROM Not detected!\n");
@@ -1236,7 +1244,9 @@ void app_settings(uint32_t delay)
             }
 #ifdef PICO_BOARD
 
-            if (EEPROM.init(EEPROM_I2CBUS, EEPROM_SDA, EEPROM_SCL, EEPROM_BusSpeed)) // For some reason, we need to always init before doing anything with I2C BUS
+            if (EEPROM.init(
+                    EEPROM_I2CBUS, EEPROM_SDA, EEPROM_SCL,
+                    EEPROM_BusSpeed)) // For some reason, we need to always init before doing anything with I2C BUS
             {
                 EEPROM.memWrite(sizeof(*pProfileLists), *pTopHeaterPID, sizeof(*pTopHeaterPID));
                 EEPROM.memWrite(sizeof(*pProfileLists) + sizeof(*pTopHeaterPID), *pBottomHeaterPID,

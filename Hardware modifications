@@ -1,6 +1,7 @@
 Modified on HotBerry board :
     Remove all series resistor on TFT data lines (Resistor network)
-    Bypass USB-5V D6 diode
+    // Bypass USB-5V D6 diode
+    Used UART0_RX as U5 MAX6675 SS pin, (Bottom Thermocouple)
 
 Modified on TFT Shield : 
     TFT LCD D0 to D7 changed from

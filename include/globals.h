@@ -1,7 +1,7 @@
 #ifndef _GLOBALS_H
 #define _GLOBALS_H
-#include <stdio.h>
 #include "pico/stdlib.h"
+#include <stdio.h>
 
 enum IO
 {
@@ -37,7 +37,7 @@ enum IO
     THERM_SCK = 20,
     SFT_DATA = 21,
     SFT_LATCH = 22,
-    SFT_SCK = 23,
+    SFT_CLOCK = 23,
     I2C0_SDA = 0,
     I2C0_SCL = 1,
     ENC_A = 6,
@@ -45,6 +45,18 @@ enum IO
     ENC_BTN = 24,
     UART0_TX = 16,
     UART0_RX = 17
+};
+
+enum SFTO
+{
+    AUX0 = 0,
+    AUX1 = 1,
+    ST_LED = 2,
+    BUZZER = 3,
+    SSR0 = 4,
+    SSR1 = 5,
+    LO1 = 6,
+    LO2 = 7
 };
 
 static constexpr uint32_t cpu_freq_mhz = 250;

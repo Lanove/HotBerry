@@ -1,3 +1,4 @@
+#include "HC595.h"
 #include "MAX6675.h"
 #include "globals.h"
 #include "hardware/adc.h"
@@ -15,22 +16,13 @@
 #define HIGH 1
 #define LOW 0
 
+HC595 sft(SFT_DATA, SFT_LATCH, SFT_CLOCK);
 MAX6675 top_max6675(THERM_DATA, THERM_SCK, THERM_CS);
 MAX6675 bottom_max6675(THERM_DATA, THERM_SCK, UART0_RX);
 movingAvg adc_topHeater(10);
 movingAvg adc_bottomHeater(10);
 
-void shiftData8(uint8_t data)
-{
-    uint8_t sspi_i;
-    // Send 8 bits, with the MSB first.
-    for (sspi_i = 0x80; sspi_i != 0x00; sspi_i >>= 1)
-    {
-        gpio_put(21, data & sspi_i);
-        gpio_put(23, 1);
-        gpio_put(23, 0);
-    }
-}
+void blinkStatusLED();
 
 int main()
 {
@@ -41,6 +33,7 @@ int main()
         printf("set system clock to %dMHz failed\n", cpu_freq_mhz);
     else
         printf("system clock is now %dMHz\n", cpu_freq_mhz);
+    sft.init();
     top_max6675.init();
     bottom_max6675.init();
     adc_topHeater.begin();
@@ -83,6 +76,7 @@ int main()
     // lv_demo_widgets();
     while (true)
     {
+        blinkStatusLED();
         uint16_t top_adc = top_max6675.sample();
         uint16_t bottom_adc = bottom_max6675.sample();
 
@@ -95,6 +89,7 @@ int main()
         counter++;
         if (counter >= 200)
         {
+            // sft.writeRegister(sft.getDataRegister() == 0xFF ? 0x00 : 0xFF);
             counter = 0;
             topHeaterPV = MAX6675::toCelcius(adc_topHeater.getAvg());
             bottomHeaterPV = MAX6675::toCelcius(adc_bottomHeater.getAvg());
@@ -108,4 +103,15 @@ int main()
         sleep_ms(5);
     }
     return 0;
+}
+
+void blinkStatusLED()
+{
+    static int counter = 0;
+    counter++;
+    if (counter >= 20)
+    {
+        sft.writePin(SFTO::ST_LED, !sft.readPin(SFTO::ST_LED));
+        counter = 0;
+    }
 }
