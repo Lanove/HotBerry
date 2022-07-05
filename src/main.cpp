@@ -15,8 +15,10 @@
 #define HIGH 1
 #define LOW 0
 
-MAX6675 *therm;
-movingAvg temperature_raw(10);
+MAX6675 top_max6675(THERM_DATA, THERM_SCK, THERM_CS);
+MAX6675 bottom_max6675(THERM_DATA, THERM_SCK, UART0_RX);
+movingAvg adc_topHeater(10);
+movingAvg adc_bottomHeater(10);
 
 void shiftData8(uint8_t data)
 {
@@ -39,9 +41,10 @@ int main()
         printf("set system clock to %dMHz failed\n", cpu_freq_mhz);
     else
         printf("system clock is now %dMHz\n", cpu_freq_mhz);
-    temperature_raw.begin();
-    therm = new MAX6675(THERM_DATA, THERM_SCK, THERM_CS);
-    therm->init();
+    top_max6675.init();
+    bottom_max6675.init();
+    adc_topHeater.begin();
+    adc_bottomHeater.begin();
     init_display();
 
     // Read-only pointers
@@ -80,26 +83,28 @@ int main()
     // lv_demo_widgets();
     while (true)
     {
-        uint16_t therm_adc = therm->sample();
-        if (therm_adc != 0xFFFF && therm_adc != 0xFFFE)
-        {
-            uint16_t avg = temperature_raw.reading(therm_adc);
-            printf("raw %.2f avg %.2fC\n", therm->toCelcius(therm_adc), therm->toCelcius(avg));
-        }
-        lv_task_handler();
+        uint16_t top_adc = top_max6675.sample();
+        uint16_t bottom_adc = bottom_max6675.sample();
+
+        if (top_adc != 0xFFFF && top_adc != 0xFFFE)
+            uint16_t avg = adc_topHeater.reading(top_adc);
+        if (bottom_adc != 0xFFFF && bottom_adc != 0xFFFE)
+            uint16_t avg = adc_bottomHeater.reading(bottom_adc);
 
         static int counter = 0;
         counter++;
         if (counter >= 200)
         {
             counter = 0;
-            topHeaterPV = rand() % (100 + 1);
-            bottomHeaterPV = rand() % (100 + 1);
+            topHeaterPV = MAX6675::toCelcius(adc_topHeater.getAvg());
+            bottomHeaterPV = MAX6675::toCelcius(adc_bottomHeater.getAvg());
             if (startedAuto || startedManual)
             {
                 secondsRunning++;
             }
         }
+
+        lv_task_handler();
         sleep_ms(5);
     }
     return 0;

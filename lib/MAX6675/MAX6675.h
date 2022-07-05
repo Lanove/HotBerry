@@ -13,7 +13,7 @@ public:
     __force_inline bool isOpen() { return open; }
     __force_inline bool isExist() { return exist; }
     __force_inline uint16_t getLastResult() { return result; }
-    __force_inline float toCelcius(uint16_t &sample) { return sample * 0.25; }
+    __force_inline static float toCelcius(uint16_t sample) { return sample * 0.25; }
 
 protected:
     uint8_t sdo, sck, cs;
