@@ -135,7 +135,7 @@ lv_obj_t *app_create_chart(lv_obj_t *_parent, bool _profileGraph, uint8_t _selec
     else
     {
         totalSecond = manual_max_run_seconds;
-        highestTemperature = 300;
+        highestTemperature = 100;
     }
     chart = lv_chart_create(parent);
     lv_chart_set_type(chart, LV_CHART_TYPE_LINE);
@@ -341,6 +341,7 @@ void lv_app_entry()
     static constexpr uint32_t hotberry_stay_dur = 0;
     static constexpr uint32_t hotberry_fadeout_dur = 0;
 #endif
+    INIT_CRITICAL_SECTION;
 
     lv_obj_t *scr = lv_obj_create(NULL);
     lv_scr_load(scr);
@@ -366,8 +367,8 @@ void lv_app_entry()
     // Open home screen after logo showcase is done
     app_home(hotberry_fadein_dur + hotberry_stay_dur + hotberry_fadeout_dur);
 
-    INIT_CRITICAL_SECTION;
 #ifdef PICO_BOARD
+    ENTER_CRITICAL_SECTION;
     if (EEPROM.init(EEPROM_I2CBUS, EEPROM_SDA, EEPROM_SCL, EEPROM_BusSpeed))
         printf("EEPROM detected!\n");
     else
@@ -376,6 +377,7 @@ void lv_app_entry()
     EEPROM.memRead(sizeof(*pProfileLists), *pTopHeaterPID, sizeof(*pTopHeaterPID));
     EEPROM.memRead(sizeof(*pProfileLists) + sizeof(*pTopHeaterPID), *pBottomHeaterPID, sizeof(*pBottomHeaterPID));
     EEPROM.memRead(0, *pProfileLists, sizeof(*pProfileLists));
+    EXIT_CRITICAL_SECTION;
 #endif
     lv_timer_create(
         [](_lv_timer_t *e) {
@@ -1237,10 +1239,10 @@ void app_settings(uint32_t delay)
             {
                 float tval = std::stof(lv_textarea_get_text(lv_obj_get_child(topHeater_cont, 2 * (i + 1))));
                 float bval = std::stof(lv_textarea_get_text(lv_obj_get_child(bottomHeater_cont, 2 * (i + 1))));
-                EXIT_CRITICAL_SECTION;
+                ENTER_CRITICAL_SECTION;
                 (*pTopHeaterPID)[i] = tval;
                 (*pBottomHeaterPID)[i] = bval;
-                ENTER_CRITICAL_SECTION;
+                EXIT_CRITICAL_SECTION;
             }
 #ifdef PICO_BOARD
 
@@ -1292,9 +1294,9 @@ void app_settings(uint32_t delay)
             char ta_buf[10];
             lv_obj_t *pid_label = lv_label_create(cont);
             lvc_label_init(pid_label, &lv_font_montserrat_20, LV_ALIGN_TOP_LEFT, ta_x_offs[y], ta_y_offs[y]);
-            lv_obj_t *pid_ta = createTextArea(cont, pidIsFloat ? 6 : 3, 100, pidIsFloat, LV_ALIGN_TOP_LEFT, 0, 0);
+            lv_obj_t *pid_ta = createTextArea(cont, pidIsFloat ? 10 : 4, 100, pidIsFloat, LV_ALIGN_TOP_LEFT, 0, 0);
             ENTER_CRITICAL_SECTION;
-            sprintf(ta_buf, "%.2f", i == 0 ? (*pTopHeaterPID)[y] : (*pBottomHeaterPID)[y]);
+            sprintf(ta_buf, "%f", i == 0 ? (*pTopHeaterPID)[y] : (*pBottomHeaterPID)[y]);
             EXIT_CRITICAL_SECTION;
             lv_textarea_set_text(pid_ta, ta_buf);
             lv_obj_align_to(pid_ta, pid_label, LV_ALIGN_OUT_RIGHT_MID, -10 - ta_x_offs[y], 0);

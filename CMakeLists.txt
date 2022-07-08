@@ -34,6 +34,7 @@ add_subdirectory(lib/movingAvg)
 add_subdirectory(lib/lv_app)
 add_subdirectory(lib/AT24C16)
 add_subdirectory(lib/HC595)
+add_subdirectory(lib/PID)
 
 target_link_directories(HotBerry PRIVATE ./include)
 
@@ -50,6 +51,9 @@ target_link_libraries(HotBerry
     lvgl::lvgl
     movingAvg
     HC595
+    pico_multicore
+    pico_sync
+    PID
 )
 
 pico_add_extra_outputs(HotBerry)

@@ -11,17 +11,26 @@
 #include "globals.h"
 #include "pico/stdlib.h"
 #include <AT24C16.h>
+#include "pico/sync.h"
+static mutex_t lv_app_mutex;
 extern AT24C16 EEPROM;
 static constexpr uint32_t EEPROM_SDA = 0;
 static constexpr uint32_t EEPROM_SCL = 1;
 static constexpr uint32_t EEPROM_BusSpeed = 400000;
 static constexpr i2c_inst_t* EEPROM_I2CBUS = i2c_default;
-#endif
-
-#define USE_INTRO 1
+// #define ENTER_CRITICAL_SECTION mutex_enter_blocking(&lv_app_mutex)
+// #define EXIT_CRITICAL_SECTION mutex_exit(&lv_app_mutex)
+// #define INIT_CRITICAL_SECTION mutex_init(&lv_app_mutex)
 #define ENTER_CRITICAL_SECTION
 #define EXIT_CRITICAL_SECTION
 #define INIT_CRITICAL_SECTION
+#else
+#define ENTER_CRITICAL_SECTION
+#define EXIT_CRITICAL_SECTION
+#define INIT_CRITICAL_SECTION
+#endif
+
+#define USE_INTRO 0
 
 LV_IMG_DECLARE(hotberry_logo);
 LV_IMG_DECLARE(robot_icon);
