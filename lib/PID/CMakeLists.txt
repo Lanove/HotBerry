@@ -15,7 +15,6 @@ add_library(PID STATIC ${FILES})
 target_link_libraries(PID PUBLIC
     pico_stdlib
     pico_platform
-    hardware_i2c
     )
 
 target_include_directories(PID PUBLIC ./)

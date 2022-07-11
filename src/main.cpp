@@ -78,16 +78,18 @@ int main()
     }
 
     // INIT_CRITICAL_SECTION;
+
+    init_display();
+    lv_app_entry();
+
     mutex_init(&reflow_mutex);
     sleep_ms(1);
     multicore_launch_core1(multicore_core1);
     sleep_ms(1);
 
-    init_display();
-    lv_app_entry();
-
     while (true)
     {
+        mutex_enter_blocking(&reflow_mutex);
         static absolute_time_t thread1_abt;
         uint16_t top_adc = top_max6675.sample();
         uint16_t bottom_adc = bottom_max6675.sample();
@@ -100,23 +102,35 @@ int main()
         if (absolute_time_diff_us(thread1_abt, get_absolute_time()) >= 1000000UL)
         {
             thread1_abt = get_absolute_time();
-            mutex_enter_blocking(&reflow_mutex);
             topHeaterPV = MAX6675::toCelcius(adc_topHeater.getAvg());
             bottomHeaterPV = MAX6675::toCelcius(adc_bottomHeater.getAvg());
             if (startedAuto || startedManual)
                 secondsRunning++;
-            mutex_exit(&reflow_mutex);
         }
+        mutex_exit(&reflow_mutex);
         lv_task_handler();
         sleep_ms(5);
     }
     return 0;
 }
 
-volatile uint16_t ssr0_pwm = 100;
-volatile uint16_t pwm_counter = 0;
+uint16_t ssr0_pwm = 100;
+uint16_t pwm_counter = 0;
 struct repeating_timer pwm_timer;
 struct repeating_timer reflow_timer;
+static double copyTopHeaterPV;
+static double copyBottomHeaterPV;
+static uint32_t copyTopHeaterSV;
+static uint32_t copyBottomHeaterSV;
+static uint32_t copySecondsRunning;
+static uint32_t lastSecond;
+static float ctopHeaterPID[3];
+static float cbottomHeaterPID[3];
+static float desiredTemperature;
+static float temperatureStep;
+static bool lastStartedManual;
+static bool cStartedManual;
+static float startTemp;
 PID bottomPID;
 void multicore_core1()
 {
@@ -124,6 +138,20 @@ void multicore_core1()
     sleep_ms(1);
     static constexpr uint16_t pwm_resolution = 1000;
     sft.init();
+
+    mutex_enter_blocking(&reflow_mutex);
+    memcpy(ctopHeaterPID, topHeaterPID, sizeof(topHeaterPID));
+    memcpy(cbottomHeaterPID, bottomHeaterPID, sizeof(bottomHeaterPID));
+    copyTopHeaterPV = MAX6675::toCelcius(adc_topHeater.getAvg());
+    copyBottomHeaterPV = MAX6675::toCelcius(adc_bottomHeater.getAvg());
+    copyTopHeaterSV = topHeaterSV;
+    copyBottomHeaterSV = bottomHeaterSV;
+    copySecondsRunning = secondsRunning;
+    cStartedManual = startedManual;
+    mutex_exit(&reflow_mutex);
+
+    bottomPID.init(&copyBottomHeaterPV, &ssr0_pwm, cbottomHeaterPID[0], cbottomHeaterPID[1], cbottomHeaterPID[2],
+                   P_ON_E, DIRECT);
     add_repeating_timer_us(
         -500,
         [](repeating_timer_t *rt) -> bool {
@@ -144,25 +172,12 @@ void multicore_core1()
         -1000,
         [](repeating_timer_t *rt) -> bool {
             static constexpr uint32_t manualTargetSecond = 90;
-            static uint32_t copyTopHeaterPV;
-            static uint32_t copyBottomHeaterPV;
-            static uint32_t copyTopHeaterSV;
-            static uint32_t copyBottomHeaterSV;
-            static uint32_t copySecondsRunning;
-            static uint32_t lastSecond;
-            static float ctopHeaterPID[3];
-            static float cbottomHeaterPID[3];
-            static float desiredTemperature;
-            static float temperatureStep;
-            static bool lastStartedManual;
-            static bool cStartedManual;
-            static float startTemp;
 
             mutex_enter_blocking(&reflow_mutex);
             memcpy(ctopHeaterPID, topHeaterPID, sizeof(topHeaterPID));
             memcpy(cbottomHeaterPID, bottomHeaterPID, sizeof(bottomHeaterPID));
-            copyTopHeaterPV = topHeaterPV;
-            copyBottomHeaterPV = bottomHeaterPV;
+            copyTopHeaterPV = MAX6675::toCelcius(adc_topHeater.getAvg());
+            copyBottomHeaterPV = MAX6675::toCelcius(adc_bottomHeater.getAvg());
             copyTopHeaterSV = topHeaterSV;
             copyBottomHeaterSV = bottomHeaterSV;
             copySecondsRunning = secondsRunning;
@@ -174,10 +189,15 @@ void multicore_core1()
                 startTemp = copyBottomHeaterPV;
                 temperatureStep = (copyBottomHeaterSV - startTemp) / (float)manualTargetSecond;
                 desiredTemperature = startTemp + (temperatureStep * (float)copySecondsRunning);
+                bottomPID.SetTunings(cbottomHeaterPID[0], cbottomHeaterPID[1], cbottomHeaterPID[2], P_ON_E);
+                bottomPID.SetOutputLimits(0., 1.);
+                bottomPID.SetSampleTime(1000);
+                bottomPID.SetControllerDirection(DIRECT);
+                bottomPID.SetMode(AUTOMATIC);
+                bottomPID.Reset();
                 ssr0_pwm = 0;
-                bottomPID.reset();
-                printf("step : %.2f C, P %f I %f D %f\n", temperatureStep, bottomHeaterPID[0], bottomHeaterPID[1],
-                       bottomHeaterPID[2]);
+                printf("step : %.2f C, P %f I %f D %f\n", temperatureStep, bottomPID.GetKp(), bottomPID.GetKi(),
+                       bottomPID.GetKd());
             }
 
             if (copySecondsRunning < manualTargetSecond && cStartedManual)
@@ -187,17 +207,14 @@ void multicore_core1()
 
             if (cStartedManual)
             {
-                if(copyBottomHeaterPV < desiredTemperature)
-                    ssr0_pwm = 1000;
-                else if(copyBottomHeaterPV >= desiredTemperature)
-                    ssr0_pwm = 0;
-                // ssr0_pwm = bottomPID.update(bottomHeaterPID[0], bottomHeaterPID[1], bottomHeaterPID[2],
-                //                             desiredTemperature, (float)copyBottomHeaterPV);
-                printf("%d;%d;%d\n", copySecondsRunning, ssr0_pwm, copyBottomHeaterPV);
+                bottomPID.Compute((double)copyBottomHeaterSV);
+                printf("%d;%d;%.2f;%d\n", copySecondsRunning, ssr0_pwm, copyBottomHeaterPV, copyBottomHeaterSV);
             }
             else
+            {
+                bottomPID.SetMode(MANUAL);
                 ssr0_pwm = 0;
-
+            }
             lastSecond = copySecondsRunning;
             lastStartedManual = cStartedManual;
             return true;

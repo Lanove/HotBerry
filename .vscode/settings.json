@@ -31,7 +31,11 @@
       "type_traits": "cpp",
       "utility": "cpp",
       "limits": "cpp",
-      "*.tcc": "cpp"
+      "*.tcc": "cpp",
+      "unordered_map": "cpp",
+      "fstream": "cpp",
+      "numeric": "cpp",
+      "sstream": "cpp"
     },
     "C_Cpp.clang_format_style": "Microsoft"
 }

@@ -1270,7 +1270,7 @@ void app_settings(uint32_t delay)
     lv_img_set_src(logo, &hotberry_logo);
     lv_obj_align_to(logo, back, LV_ALIGN_OUT_RIGHT_MID, -20, 0);
     lv_img_set_zoom(logo, 190);
-
+    
     lv_obj_t *settings_label = lv_label_create(header);
     lvc_label_init(settings_label, &lv_font_montserrat_24, LV_ALIGN_RIGHT_MID, 0, 0, bs_white);
     lv_label_set_text_static(settings_label, "SETTINGS");
