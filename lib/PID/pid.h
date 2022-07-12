@@ -34,7 +34,7 @@ class PID
         PID::SetOutputLimits(0., 1000.); // default output limit corresponds to
                                          // the arduino pwm limits
 
-        SampleTime = 1000; // default Controller Sample Time is 0.1 seconds
+        SampleTime = 1000; // default Controller Sample Time is 1 seconds
 
         PID::SetControllerDirection(MANUAL);
         PID::SetTunings(0, 0, 0);
@@ -74,8 +74,9 @@ class PID
 
     void Reset()
     {
-        outputSum = 0;
-        lastInput = 0;
+        outputSum = 0.;
+        lastInput = 0.;
+        lastError = 0.;
     };
 
   private:
@@ -95,7 +96,7 @@ class PID
     double *myInput;    // * Pointers to the Input, Output, and Setpoint variables
     uint16_t *myOutput; //   This creates a hard link between the variables and the
 
-    double outputSum, lastInput;
+    double outputSum, lastInput, lastError;
 
     unsigned long SampleTime;
     double outMin, outMax;

@@ -1,3 +1,4 @@
+#include "FreeRTOS.h"
 #include "HC595.h"
 #include "MAX6675.h"
 #include "globals.h"
@@ -14,7 +15,11 @@
 #include "pico/multicore.h"
 #include "pico/sync.h"
 #include "pid.h"
+#include "semphr.h"
+#include "task.h"
 #include <tusb.h>
+
+#define LV_APP_TASK_PRIORITY (tskIDLE_PRIORITY + 1)
 
 #define HIGH 1
 #define LOW 0
@@ -44,6 +49,7 @@ static mutex_t reflow_mutex;
 
 void blinkStatusLED();
 void multicore_core1();
+static void lv_app_task(void *param);
 
 int main()
 {
@@ -81,11 +87,12 @@ int main()
 
     init_display();
     lv_app_entry();
+    xTaskCreate(lv_app_task, "lv_app", configMINIMAL_STACK_SIZE, NULL, LV_APP_TASK_PRIORITY, NULL);
 
     mutex_init(&reflow_mutex);
     sleep_ms(1);
     multicore_launch_core1(multicore_core1);
-    sleep_ms(1);
+    sleep_ms(100);
 
     while (true)
     {
@@ -182,22 +189,20 @@ void multicore_core1()
             copyBottomHeaterSV = bottomHeaterSV;
             copySecondsRunning = secondsRunning;
             cStartedManual = startedManual;
-            mutex_exit(&reflow_mutex);
 
             if (lastStartedManual != cStartedManual && cStartedManual == 1)
             {
                 startTemp = copyBottomHeaterPV;
                 temperatureStep = (copyBottomHeaterSV - startTemp) / (float)manualTargetSecond;
                 desiredTemperature = startTemp + (temperatureStep * (float)copySecondsRunning);
+                bottomPID.SetSampleTime(1000);
                 bottomPID.SetTunings(cbottomHeaterPID[0], cbottomHeaterPID[1], cbottomHeaterPID[2], P_ON_E);
                 bottomPID.SetOutputLimits(0., 1.);
-                bottomPID.SetSampleTime(1000);
                 bottomPID.SetControllerDirection(DIRECT);
                 bottomPID.SetMode(AUTOMATIC);
                 bottomPID.Reset();
                 ssr0_pwm = 0;
-                printf("step : %.2f C, P %f I %f D %f\n", temperatureStep, bottomPID.GetKp(), bottomPID.GetKi(),
-                       bottomPID.GetKd());
+                printf("Starting P %f I %f D %f\n", bottomPID.GetKp(), bottomPID.GetKi(), bottomPID.GetKd());
             }
 
             if (copySecondsRunning < manualTargetSecond && cStartedManual)
@@ -207,8 +212,8 @@ void multicore_core1()
 
             if (cStartedManual)
             {
+                printf("%d;", copySecondsRunning);
                 bottomPID.Compute((double)copyBottomHeaterSV);
-                printf("%d;%d;%.2f;%d\n", copySecondsRunning, ssr0_pwm, copyBottomHeaterPV, copyBottomHeaterSV);
             }
             else
             {
@@ -217,6 +222,7 @@ void multicore_core1()
             }
             lastSecond = copySecondsRunning;
             lastStartedManual = cStartedManual;
+            mutex_exit(&reflow_mutex);
             return true;
         },
         NULL, &reflow_timer);

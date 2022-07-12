@@ -42,36 +42,31 @@ bool PID::Compute(double sv)
     /*Compute all the working error variables*/
     double input = (double)*myInput;
     double error = sv - input;
-    double dInput = (input - lastInput);
     outputSum += (ki * error);
 
-    /*Add Proportional on Measurement, if P_ON_M is specified*/
-    if (!pOnE)
-        outputSum -= kp * dInput;
-
+    /*Integral anti wind-up by clamping*/
     if (outputSum > outMax)
         outputSum = outMax;
     else if (outputSum < outMin)
         outputSum = outMin;
 
-    /*Add Proportional on Error, if P_ON_E is specified*/
     double output;
-    if (pOnE)
-        output = kp * error;
-    else
-        output = 0;
+    output = kp * error;
 
     /*Compute Rest of PID Output*/
-    output += outputSum - kd * dInput;
+    output += outputSum + kd * (error - lastError);
 
+    /* Output clamping */
     if (output > outMax)
         output = outMax;
     else if (output < outMin)
         output = outMin;
     *myOutput = (uint16_t)(output * 1000.);
 
+    printf("%.2f;%.3f;%.3f;%.3f;%.3f;%.3f;%.2f\n", *myInput, output, error, kd * (error - lastError), kp * error, outputSum, sv);
     /*Remember some variables for next time*/
     lastInput = input;
+    lastError = error;
     return true;
 }
 

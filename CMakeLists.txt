@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.13)
 include(pico_sdk_import.cmake)
+include(FreeRTOS_Kernel_import.cmake)
 set(PICO_BOARD "hotberry" CACHE STRING [FORCE])
 set(LV_CONF_PATH
     ${CMAKE_CURRENT_SOURCE_DIR}/include/lv_conf.h
@@ -36,7 +37,9 @@ add_subdirectory(lib/AT24C16)
 add_subdirectory(lib/HC595)
 add_subdirectory(lib/PID)
 
-target_link_directories(HotBerry PRIVATE ./include)
+target_include_directories(HotBerry PRIVATE ${CMAKE_CURRENT_LIST_DIR} ./include)
+
+target_link_directories(HotBerry PRIVATE ${CMAKE_CURRENT_LIST_DIR} ./include)
 
 target_link_libraries(HotBerry
     pico_stdlib
@@ -54,6 +57,7 @@ target_link_libraries(HotBerry
     pico_multicore
     pico_sync
     PID
+    FreeRTOS-Kernel-Heap4 # FreeRTOS kernel and dynamic heap
 )
 
 pico_add_extra_outputs(HotBerry)
