@@ -1,4 +1,3 @@
-#include "FreeRTOS.h"
 #include "HC595.h"
 #include "MAX6675.h"
 #include "globals.h"
@@ -12,14 +11,11 @@
 #include "lv_drivers.h"
 #include "lvgl.h"
 #include "movingAvg.h"
-#include "pico/multicore.h"
-#include "pico/sync.h"
 #include "pid.h"
+#include "FreeRTOS.h"
 #include "semphr.h"
 #include "task.h"
 #include <tusb.h>
-
-#define LV_APP_TASK_PRIORITY (tskIDLE_PRIORITY + 1)
 
 #define HIGH 1
 #define LOW 0
@@ -47,9 +43,16 @@ static Profile profileLists[10];
 
 static mutex_t reflow_mutex;
 
+static constexpr UBaseType_t lv_app_task_priority = (tskIDLE_PRIORITY + 1);
+static constexpr UBaseType_t sensor_task_priority = (tskIDLE_PRIORITY + 2);
+static constexpr UBaseType_t pid_task_priority = (tskIDLE_PRIORITY + 3);
+static constexpr UBaseType_t pwm_task_priority = (tskIDLE_PRIORITY + 4);
+
 void blinkStatusLED();
-void multicore_core1();
-static void lv_app_task(void *param);
+static void lv_app_task(void *pvParameter);
+static void sensor_task(void *pvParameter);
+static void pwm_task(void *pvParameter);
+static void pid_task(void *pvParameter);
 
 int main()
 {
@@ -87,12 +90,14 @@ int main()
 
     init_display();
     lv_app_entry();
-    xTaskCreate(lv_app_task, "lv_app", configMINIMAL_STACK_SIZE, NULL, LV_APP_TASK_PRIORITY, NULL);
+    xTaskCreate(lv_app_task, "lv_app_task", LV_MEM_SIZE, NULL, lv_app_task_priority, NULL);
+    xTaskCreate(sensor_task, "sensor_task", configMINIMAL_STACK_SIZE, NULL, sensor_task_priority, NULL);
+    xTaskCreate(pwm_task, "pwm_task", configMINIMAL_STACK_SIZE, NULL, pwm_task_priority, NULL);
+    xTaskCreate(pid_task, "pid_task", 2048, NULL, pid_task_priority, NULL);
+
+    vTaskStartScheduler();
 
     mutex_init(&reflow_mutex);
-    sleep_ms(1);
-    multicore_launch_core1(multicore_core1);
-    sleep_ms(100);
 
     while (true)
     {
