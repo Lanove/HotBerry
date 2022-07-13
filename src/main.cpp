@@ -41,12 +41,9 @@ static float bottomHeaterPID[3];
 static uint16_t selectedProfile = 0;
 static Profile profileLists[10];
 
-static mutex_t reflow_mutex;
-
 static constexpr UBaseType_t lv_app_task_priority = (tskIDLE_PRIORITY + 1);
 static constexpr UBaseType_t sensor_task_priority = (tskIDLE_PRIORITY + 2);
 static constexpr UBaseType_t pid_task_priority = (tskIDLE_PRIORITY + 3);
-static constexpr UBaseType_t pwm_task_priority = (tskIDLE_PRIORITY + 4);
 
 static SemaphoreHandle_t sensor_mutex;
 
@@ -55,6 +52,14 @@ static void lv_app_task(void *pvParameter);
 static void sensor_task(void *pvParameter);
 static void pwm_task(void *pvParameter);
 static void pid_task(void *pvParameter);
+
+bool pwm_timer_cb(repeating_timer_t *rt);
+static constexpr uint16_t pwm_resolution = 1000;
+static SemaphoreHandle_t pwm_timer_mutex;
+uint16_t pwm_ssr0 = 100;
+uint16_t pwm_ssr1 = 100;
+uint16_t pwm_counter = 0;
+struct repeating_timer pwm_timer;
 
 int main()
 {
@@ -69,8 +74,8 @@ int main()
 #ifdef FREE_RTOS_KERNEL_SMP
     printf("Using FreeRTOS SMP Kernel\n");
 #endif
+
     sft.init();
-    sft.writePin(SFTO::SSR0, 1);
 
     {
         using namespace lv_app_pointers;
@@ -89,26 +94,45 @@ int main()
         pProfileLists = &profileLists;
     }
 
-    // INIT_CRITICAL_SECTION;
-
     LV_APP_MUTEX_INIT;
     sensor_mutex = xSemaphoreCreateMutex();
+    pwm_timer_mutex = xSemaphoreCreateMutex();
+
+    add_repeating_timer_us(-500, pwm_timer_cb, NULL, &pwm_timer);
+
     xTaskCreate(lv_app_task, "lv_app_task", 4096UL, NULL, lv_app_task_priority, NULL);
     xTaskCreate(sensor_task, "sensor_task", configMINIMAL_STACK_SIZE, NULL, sensor_task_priority, NULL);
     xTaskCreate(pid_task, "pid_task", configMINIMAL_STACK_SIZE, NULL, pid_task_priority, NULL);
-    xTaskCreate(pwm_task, "pwm_task", configMINIMAL_STACK_SIZE, NULL, pwm_task_priority, NULL);
-
+    
     vTaskStartScheduler();
 
-    while (true)
-    {
-    }
+    while (true);
     return 0;
 }
 
-uint16_t ssr0_pwm = 100;
-uint16_t pwm_counter = 0;
-struct repeating_timer pwm_timer;
+bool pwm_timer_cb(repeating_timer_t *rt)
+{
+    xSemaphoreTakeFromISR(pwm_timer_mutex, NULL);
+    uint16_t c_pwm_ssr0 = pwm_ssr0;
+    uint16_t c_pwm_ssr1 = pwm_ssr1;
+    xSemaphoreGiveFromISR(pwm_timer_mutex, NULL);
+
+    pwm_counter++;
+    if (pwm_counter >= c_pwm_ssr0 && c_pwm_ssr0 != pwm_resolution)
+        sft.writePin(SFTO::SSR0, 0);
+    if (pwm_counter >= c_pwm_ssr1 && c_pwm_ssr1 != pwm_resolution)
+        sft.writePin(SFTO::SSR1, 0);
+    if (pwm_counter >= pwm_resolution)
+    {
+        if (c_pwm_ssr0 != 0)
+            sft.writePin(SFTO::SSR0, 1);
+        if (c_pwm_ssr1 != 0)
+            sft.writePin(SFTO::SSR1, 1);
+        pwm_counter = 0;
+    }
+    return true;
+}
+
 struct repeating_timer reflow_timer;
 static double copyTopHeaterPV;
 static double copyBottomHeaterPV;
@@ -154,14 +178,6 @@ static void sensor_task(void *pvParameter)
     }
 }
 
-static void pwm_task(void *pvParameter)
-{
-    for (;;)
-    {
-        vTaskDelay(100);
-    }
-}
-
 static void pid_task(void *pvParameter)
 {
     for (;;)
@@ -182,6 +198,7 @@ static void pid_task(void *pvParameter)
 
 void multicore_core1()
 {
+    /*
     mutex_init(&reflow_mutex);
     sleep_ms(1);
     static constexpr uint16_t pwm_resolution = 1000;
@@ -272,6 +289,7 @@ void multicore_core1()
     {
         tight_loop_contents();
     }
+    */
 }
 
 void blinkStatusLED()
