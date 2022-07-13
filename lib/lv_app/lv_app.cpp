@@ -2,6 +2,7 @@
 #include "keyboard.h"
 #ifdef PICO_BOARD
 AT24C16 EEPROM;
+SemaphoreHandle_t lv_app_mutex;
 #endif
 
 static constexpr uint32_t animTime = 500;
@@ -341,7 +342,6 @@ void lv_app_entry()
     static constexpr uint32_t hotberry_stay_dur = 0;
     static constexpr uint32_t hotberry_fadeout_dur = 0;
 #endif
-    LV_APP_MUTEX_INIT;
 
     lv_obj_t *scr = lv_obj_create(NULL);
     lv_scr_load(scr);

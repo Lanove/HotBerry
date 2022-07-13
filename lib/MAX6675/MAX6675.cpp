@@ -28,9 +28,9 @@ void MAX6675::init()
 }
 
 /**
- * @brief Sample sensor, will return the correct 12-bit value if sensor is ready or return 0xFFFE if sensor is not ready yet
+ * @brief Sample sensor, only need to be called once every 0.17s because sensor conversion time is 0.17s
  * 
- * @return uint16_t Sampled 12-bit ADC ranging from 0 to 700C or 0xFFFE if sensor is not ready
+ * @return uint16_t Sampled 12-bit ADC ranging from 0 to 700C
  */
 uint16_t MAX6675::sample()
 {
@@ -39,8 +39,9 @@ uint16_t MAX6675::sample()
     // The sensor typically needs 0.17s to convert next value
     // so if last sampling time is less than conversion time we halt the sampling and return 0xFFFE instead
     uint64_t diff = absolute_time_diff_us(lastSample, get_absolute_time());
-    if (diff < CONVERSION_TIME)
-        return 0xFFFE;
+    // if (diff < CONVERSION_TIME)
+        // return 0xFFFE;
+    
     uint16_t resp = 0;
     /*
         From Datasheet :

@@ -11,10 +11,14 @@ project(AT24C16)
 file(GLOB FILES ./*.cpp ./*.h)
 add_library(AT24C16 STATIC ${FILES})
 
+target_link_directories(AT24C16 PRIVATE ../../include)
+target_include_directories(AT24C16 PRIVATE ../../include)
+
 # Add the standard library to the build
 target_link_libraries(AT24C16 PUBLIC
     pico_stdlib
     hardware_i2c
-    )
+    FreeRTOS-Kernel-Heap4 # FreeRTOS kernel and dynamic heap
+)
 
 target_include_directories(AT24C16 PUBLIC ./)

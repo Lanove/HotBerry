@@ -1,7 +1,7 @@
 /**
  * @file AT24C16.cpp
  * @author Figo Arzaki Maulana (figoarzaki123@gmail.com)
- * @brief Simple driver to interface to AT24C16 EEPROM
+ * @brief Simple driver to interface to AT24C16 EEPROM for RP2040 with FreeRTOS
  * AT24C16 is internally organized with 128 pages of 16 bytes each, it's total size is 16K Bits(2048 Bytes)
  * Note the following from the memory map.
     Each page requires 8-bits to to access the 256 locations/address
@@ -147,5 +147,5 @@ void AT24C16::pageWrite(uint16_t address, const uint8_t *src, uint8_t len)
     // tWR max 5ms
     // Note: 1. The write cycle time tWR is the time from a valid stop condition of a write sequence to the end of the
     // internal clear/write cycle
-    sleep_ms(7);
+    vTaskDelay(7 / portTICK_PERIOD_MS);
 }

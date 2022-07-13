@@ -1,7 +1,7 @@
 /**
  * @file AT24C16.h
  * @author Figo Arzaki Maulana (figoarzaki123@gmail.com)
- * @brief Simple driver to interface to AT24C16 EEPROM
+ * @brief Simple driver to interface to AT24C16 EEPROM for RP2040 with FreeRTOS
  * AT24C16 is internally organized with 128 pages of 16 bytes each, it's total size is 16K Bits(2048 Bytes)
  * Note the following from the memory map.
     Each page requires 8-bits to to access the 256 locations/address
@@ -19,6 +19,8 @@
 #include <hardware/i2c.h>
 #include <stdio.h>
 #include <string.h>
+#include "FreeRTOS.h"
+#include "task.h"
 #define _AT24Cxx_H_
 
 static constexpr uint8_t AT24C16_PageSize = 16;
