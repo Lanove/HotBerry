@@ -45,21 +45,25 @@ static constexpr UBaseType_t lv_app_task_priority = (tskIDLE_PRIORITY + 1);
 static constexpr UBaseType_t sensor_task_priority = (tskIDLE_PRIORITY + 2);
 static constexpr UBaseType_t pid_task_priority = (tskIDLE_PRIORITY + 3);
 
+static TaskHandle_t lv_app_task_handle;
+static TaskHandle_t sensor_task_handle;
+static TaskHandle_t pid_task_handle;
+
 static SemaphoreHandle_t sensor_mutex;
 
 void blinkStatusLED();
 static void lv_app_task(void *pvParameter);
 static void sensor_task(void *pvParameter);
-static void pwm_task(void *pvParameter);
 static void pid_task(void *pvParameter);
 
 bool pwm_timer_cb(repeating_timer_t *rt);
 static constexpr uint16_t pwm_resolution = 1000;
-static SemaphoreHandle_t pwm_timer_mutex;
+static QueueHandle_t pwm_ssr0_queue = NULL;
 uint16_t pwm_ssr0 = 100;
 uint16_t pwm_ssr1 = 100;
 uint16_t pwm_counter = 0;
 struct repeating_timer pwm_timer;
+PIDController PID_bottomHeater;
 
 int main()
 {
@@ -96,26 +100,32 @@ int main()
 
     LV_APP_MUTEX_INIT;
     sensor_mutex = xSemaphoreCreateMutex();
-    pwm_timer_mutex = xSemaphoreCreateMutex();
+    pwm_ssr0_queue = xQueueCreate(1, sizeof(uint32_t));
+
+    if (pwm_ssr0_queue == NULL)
+        printf("failed creating queue\n");
+    else
+        printf("success creating queue\n");
 
     add_repeating_timer_us(-500, pwm_timer_cb, NULL, &pwm_timer);
 
-    xTaskCreate(lv_app_task, "lv_app_task", 4096UL, NULL, lv_app_task_priority, NULL);
-    xTaskCreate(sensor_task, "sensor_task", configMINIMAL_STACK_SIZE, NULL, sensor_task_priority, NULL);
-    xTaskCreate(pid_task, "pid_task", configMINIMAL_STACK_SIZE, NULL, pid_task_priority, NULL);
-    
+    xTaskCreate(lv_app_task, "lv_app_task", 8192UL, NULL, lv_app_task_priority, &lv_app_task_handle);
+    xTaskCreate(sensor_task, "sensor_task", configMINIMAL_STACK_SIZE, NULL, sensor_task_priority, &sensor_task_handle);
+    xTaskCreate(pid_task, "pid_task", 1024UL, NULL, pid_task_priority, &pid_task_handle);
+
     vTaskStartScheduler();
 
-    while (true);
+    while (true)
+        ;
     return 0;
 }
 
 bool pwm_timer_cb(repeating_timer_t *rt)
 {
-    xSemaphoreTakeFromISR(pwm_timer_mutex, NULL);
-    uint16_t c_pwm_ssr0 = pwm_ssr0;
-    uint16_t c_pwm_ssr1 = pwm_ssr1;
-    xSemaphoreGiveFromISR(pwm_timer_mutex, NULL);
+    static uint16_t c_pwm_ssr0 = 0;
+    static uint16_t c_pwm_ssr1 = 0;
+
+    xQueueReceiveFromISR(pwm_ssr0_queue, &c_pwm_ssr0, NULL);
 
     pwm_counter++;
     if (pwm_counter >= c_pwm_ssr0 && c_pwm_ssr0 != pwm_resolution)
@@ -132,22 +142,6 @@ bool pwm_timer_cb(repeating_timer_t *rt)
     }
     return true;
 }
-
-struct repeating_timer reflow_timer;
-static double copyTopHeaterPV;
-static double copyBottomHeaterPV;
-static uint32_t copyTopHeaterSV;
-static uint32_t copyBottomHeaterSV;
-static uint32_t copySecondsRunning;
-static uint32_t lastSecond;
-static float ctopHeaterPID[3];
-static float cbottomHeaterPID[3];
-static float desiredTemperature;
-static float temperatureStep;
-static bool lastStartedManual;
-static bool cStartedManual;
-static float startTemp;
-PID bottomPID;
 
 static void lv_app_task(void *pvParameter)
 {
@@ -180,125 +174,54 @@ static void sensor_task(void *pvParameter)
 
 static void pid_task(void *pvParameter)
 {
+    static constexpr float PID_sampleTime = 1.0f;
+    static constexpr float PID_derivativeTau = .3f; // Pole at 3.333 or 1/0.3
+    bool lastStartedManual;
+    PIDController_Init(&PID_bottomHeater);
+    PIDController_SetIntegralLimit(&PID_bottomHeater, 0.0f, 1.0f);
+    PIDController_SetOutputLimit(&PID_bottomHeater, 0.0f, 1.0f);
     for (;;)
     {
         xSemaphoreTake(sensor_mutex, portMAX_DELAY);
         float topHeaterPV_f = MAX6675::toCelcius(adc_topHeater.getAvg());
         float bottomHeaterPV_f = MAX6675::toCelcius(adc_bottomHeater.getAvg());
         xSemaphoreGive(sensor_mutex);
+
         xSemaphoreTake(lv_app_mutex, portMAX_DELAY);
         topHeaterPV = topHeaterPV_f;
         bottomHeaterPV = bottomHeaterPV_f;
         if (startedAuto || startedManual)
             secondsRunning++;
+
+        if (lastStartedManual != startedManual && startedManual == 1)
+        {
+            PIDController_Init(&PID_bottomHeater);
+            pwm_ssr0 = 0;
+            PIDController_SetTuning(&PID_bottomHeater, bottomHeaterPID[0], bottomHeaterPID[1], bottomHeaterPID[2],
+                                    PID_sampleTime, PID_derivativeTau);
+            PID_bottomHeater.prevMeasurement = bottomHeaterPV_f;
+            printf("Starting P %f I %f D %f sampleTime %.1f tau %f\n", PID_bottomHeater.Kp, PID_bottomHeater.Ki,
+                   PID_bottomHeater.Kd, PID_sampleTime, PID_derivativeTau);
+        }
+
+        if (startedManual)
+        {
+            PIDController_Compute(&PID_bottomHeater, (pid_variable_t)bottomHeaterSV, (pid_variable_t)bottomHeaterPV_f);
+            // seconds;pv;output;p;i;d;error;sv
+            printf("%d;%.2f;%.3f;%.3f;%.3f;%.3f;%.2f;%.2f\n", secondsRunning, PID_bottomHeater.prevMeasurement,
+                   PID_bottomHeater.out, PID_bottomHeater.proportional, PID_bottomHeater.integrator,
+                   PID_bottomHeater.differentiator, PID_bottomHeater.prevError, PID_bottomHeater.setPoint);
+        }
+
+        if (startedManual)
+            pwm_ssr0 = (uint16_t)(PID_bottomHeater.out * 1000.);
+        else
+            pwm_ssr0 = 0;
+
+        xQueueSend(pwm_ssr0_queue, &pwm_ssr0, portMAX_DELAY);
+
+        lastStartedManual = startedManual;
         xSemaphoreGive(lv_app_mutex);
         vTaskDelay(1000 / portTICK_PERIOD_MS);
-    }
-}
-
-void multicore_core1()
-{
-    /*
-    mutex_init(&reflow_mutex);
-    sleep_ms(1);
-    static constexpr uint16_t pwm_resolution = 1000;
-
-    mutex_enter_blocking(&reflow_mutex);
-    memcpy(ctopHeaterPID, topHeaterPID, sizeof(topHeaterPID));
-    memcpy(cbottomHeaterPID, bottomHeaterPID, sizeof(bottomHeaterPID));
-    copyTopHeaterPV = MAX6675::toCelcius(adc_topHeater.getAvg());
-    copyBottomHeaterPV = MAX6675::toCelcius(adc_bottomHeater.getAvg());
-    copyTopHeaterSV = topHeaterSV;
-    copyBottomHeaterSV = bottomHeaterSV;
-    copySecondsRunning = secondsRunning;
-    cStartedManual = startedManual;
-    mutex_exit(&reflow_mutex);
-
-    bottomPID.init(&copyBottomHeaterPV, &ssr0_pwm, cbottomHeaterPID[0], cbottomHeaterPID[1], cbottomHeaterPID[2],
-                   P_ON_E, DIRECT);
-    add_repeating_timer_us(
-        -500,
-        [](repeating_timer_t *rt) -> bool {
-            pwm_counter++;
-            if (pwm_counter >= ssr0_pwm && ssr0_pwm != pwm_resolution)
-                sft.writePin(SFTO::SSR0, 0);
-            if (pwm_counter >= pwm_resolution)
-            {
-                if (ssr0_pwm != 0)
-                    sft.writePin(SFTO::SSR0, 1);
-                pwm_counter = 0;
-            }
-            return true;
-        },
-        NULL, &pwm_timer);
-
-    add_repeating_timer_ms(
-        -1000,
-        [](repeating_timer_t *rt) -> bool {
-            static constexpr uint32_t manualTargetSecond = 90;
-
-            mutex_enter_blocking(&reflow_mutex);
-            memcpy(ctopHeaterPID, topHeaterPID, sizeof(topHeaterPID));
-            memcpy(cbottomHeaterPID, bottomHeaterPID, sizeof(bottomHeaterPID));
-            copyTopHeaterPV = MAX6675::toCelcius(adc_topHeater.getAvg());
-            copyBottomHeaterPV = MAX6675::toCelcius(adc_bottomHeater.getAvg());
-            copyTopHeaterSV = topHeaterSV;
-            copyBottomHeaterSV = bottomHeaterSV;
-            copySecondsRunning = secondsRunning;
-            cStartedManual = startedManual;
-
-            if (lastStartedManual != cStartedManual && cStartedManual == 1)
-            {
-                startTemp = copyBottomHeaterPV;
-                temperatureStep = (copyBottomHeaterSV - startTemp) / (float)manualTargetSecond;
-                desiredTemperature = startTemp + (temperatureStep * (float)copySecondsRunning);
-                bottomPID.SetSampleTime(1000);
-                bottomPID.SetTunings(cbottomHeaterPID[0], cbottomHeaterPID[1], cbottomHeaterPID[2], P_ON_E);
-                bottomPID.SetOutputLimits(0., 1.);
-                bottomPID.SetControllerDirection(DIRECT);
-                bottomPID.SetMode(AUTOMATIC);
-                bottomPID.Reset();
-                ssr0_pwm = 0;
-                printf("Starting P %f I %f D %f\n", bottomPID.GetKp(), bottomPID.GetKi(), bottomPID.GetKd());
-            }
-
-            if (copySecondsRunning < manualTargetSecond && cStartedManual)
-                desiredTemperature = startTemp + (temperatureStep * (float)copySecondsRunning);
-            else
-                desiredTemperature = copyBottomHeaterSV;
-
-            if (cStartedManual)
-            {
-                printf("%d;", copySecondsRunning);
-                bottomPID.Compute((double)copyBottomHeaterSV);
-            }
-            else
-            {
-                bottomPID.SetMode(MANUAL);
-                ssr0_pwm = 0;
-            }
-            lastSecond = copySecondsRunning;
-            lastStartedManual = cStartedManual;
-            mutex_exit(&reflow_mutex);
-            return true;
-        },
-        NULL, &reflow_timer);
-    // init_display();
-    // lv_app_entry();
-    while (true)
-    {
-        tight_loop_contents();
-    }
-    */
-}
-
-void blinkStatusLED()
-{
-    static int counter = 0;
-    counter++;
-    if (counter >= 10)
-    {
-        sft.writePin(SFTO::ST_LED, !sft.readPin(SFTO::ST_LED));
-        counter = 0;
     }
 }
