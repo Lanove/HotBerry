@@ -41,13 +41,14 @@ static float bottomHeaterPID[3];
 static uint16_t selectedProfile = 0;
 static Profile profileLists[10];
 
+static mutex_t reflow_mutex;
+
 static constexpr UBaseType_t lv_app_task_priority = (tskIDLE_PRIORITY + 1);
 static constexpr UBaseType_t sensor_task_priority = (tskIDLE_PRIORITY + 2);
 static constexpr UBaseType_t pid_task_priority = (tskIDLE_PRIORITY + 3);
 static constexpr UBaseType_t pwm_task_priority = (tskIDLE_PRIORITY + 4);
 
 static SemaphoreHandle_t sensor_mutex;
-static SemaphoreHandle_t pwm_mutex;
 
 void blinkStatusLED();
 static void lv_app_task(void *pvParameter);
@@ -68,6 +69,8 @@ int main()
 #ifdef FREE_RTOS_KERNEL_SMP
     printf("Using FreeRTOS SMP Kernel\n");
 #endif
+    sft.init();
+    sft.writePin(SFTO::SSR0, 1);
 
     {
         using namespace lv_app_pointers;
@@ -88,6 +91,8 @@ int main()
 
     // INIT_CRITICAL_SECTION;
 
+    LV_APP_MUTEX_INIT;
+    sensor_mutex = xSemaphoreCreateMutex();
     xTaskCreate(lv_app_task, "lv_app_task", 4096UL, NULL, lv_app_task_priority, NULL);
     xTaskCreate(sensor_task, "sensor_task", configMINIMAL_STACK_SIZE, NULL, sensor_task_priority, NULL);
     xTaskCreate(pid_task, "pid_task", configMINIMAL_STACK_SIZE, NULL, pid_task_priority, NULL);
@@ -122,8 +127,6 @@ PID bottomPID;
 
 static void lv_app_task(void *pvParameter)
 {
-    printf("Hello from lv_app task\n");
-    LV_APP_MUTEX_INIT;
     init_display();
     lv_app_entry();
     for (;;)
@@ -135,8 +138,6 @@ static void lv_app_task(void *pvParameter)
 
 static void sensor_task(void *pvParameter)
 {
-    printf("Hello from sensor task\n");
-    sensor_mutex = xSemaphoreCreateMutex();
     top_max6675.init();
     bottom_max6675.init();
     adc_topHeater.begin();
@@ -149,67 +150,41 @@ static void sensor_task(void *pvParameter)
         adc_topHeater.reading(top_adc);
         adc_bottomHeater.reading(bottom_adc);
         xSemaphoreGive(sensor_mutex);
-        vTaskDelay(180 / portTICK_PERIOD_MS);
+        vTaskDelay(200 / portTICK_PERIOD_MS);
     }
 }
 
 static void pwm_task(void *pvParameter)
 {
-    printf("Hello from PWM task\n");
-    static constexpr uint16_t pwm_resolution = 1000;
-    pwm_mutex = xSemaphoreCreateMutex();
-    sft.init();
-    add_repeating_timer_us(
-        -500,
-        [](repeating_timer_t *rt) -> bool {
-            static uint16_t c_ssr0_pwm = 0;
-            if (xSemaphoreTakeFromISR(pwm_mutex, NULL) == pdTRUE)
-            {
-                uint16_t c_ssr0_pwm = ssr0_pwm;
-                xSemaphoreGiveFromISR(pwm_mutex, NULL);
-            }
-            pwm_counter++;
-            if (pwm_counter >= c_ssr0_pwm && c_ssr0_pwm != pwm_resolution)
-                sft.writePin(SFTO::SSR0, 0);
-            if (pwm_counter >= pwm_resolution)
-            {
-                if (c_ssr0_pwm != 0)
-                    sft.writePin(SFTO::SSR0, 1);
-                pwm_counter = 0;
-            }
-            return true;
-        },
-        NULL, &pwm_timer);
-    for (;;) // Wait idly
+    for (;;)
+    {
         vTaskDelay(100);
+    }
 }
 
 static void pid_task(void *pvParameter)
 {
-    printf("Hello from PID task\n");
-    bottomPID.init(&copyBottomHeaterPV, &ssr0_pwm, cbottomHeaterPID[0], cbottomHeaterPID[1], cbottomHeaterPID[2],
-                   P_ON_E, DIRECT);
     for (;;)
     {
         xSemaphoreTake(sensor_mutex, portMAX_DELAY);
         float topHeaterPV_f = MAX6675::toCelcius(adc_topHeater.getAvg());
         float bottomHeaterPV_f = MAX6675::toCelcius(adc_bottomHeater.getAvg());
         xSemaphoreGive(sensor_mutex);
-        LV_APP_MUTEX_ENTER;
+        xSemaphoreTake(lv_app_mutex, portMAX_DELAY);
         topHeaterPV = topHeaterPV_f;
         bottomHeaterPV = bottomHeaterPV_f;
         if (startedAuto || startedManual)
             secondsRunning++;
-        LV_APP_MUTEX_EXIT;
+        xSemaphoreGive(lv_app_mutex);
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 }
 
 void multicore_core1()
 {
-    /*
+    mutex_init(&reflow_mutex);
     sleep_ms(1);
-    sft.init();
+    static constexpr uint16_t pwm_resolution = 1000;
 
     mutex_enter_blocking(&reflow_mutex);
     memcpy(ctopHeaterPID, topHeaterPID, sizeof(topHeaterPID));
@@ -297,7 +272,6 @@ void multicore_core1()
     {
         tight_loop_contents();
     }
-    */
 }
 
 void blinkStatusLED()
