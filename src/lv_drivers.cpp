@@ -1,6 +1,6 @@
 #include "lv_drivers.h"
 
-static constexpr size_t displayBufferSize = 480 * 40;
+static constexpr size_t displayBufferSize = 480 * 80;
 
 static lv_disp_drv_t lv_display_device;
 /*A static or global variable to store the buffers*/

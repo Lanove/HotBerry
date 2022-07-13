@@ -1,3 +1,4 @@
+#include "FreeRTOS.h"
 #include "HC595.h"
 #include "MAX6675.h"
 #include "globals.h"
@@ -12,7 +13,6 @@
 #include "lvgl.h"
 #include "movingAvg.h"
 #include "pid.h"
-#include "FreeRTOS.h"
 #include "semphr.h"
 #include "task.h"
 #include <tusb.h>
@@ -64,6 +64,10 @@ int main()
     else
         printf("system clock is now %dMHz\n", cpu_freq_mhz);
 
+#ifdef FREE_RTOS_KERNEL_SMP
+    printf("Using FreeRTOS SMP Kernel\n");
+#endif
+
     top_max6675.init();
     bottom_max6675.init();
     adc_topHeater.begin();
@@ -88,12 +92,10 @@ int main()
 
     // INIT_CRITICAL_SECTION;
 
-    init_display();
-    lv_app_entry();
-    xTaskCreate(lv_app_task, "lv_app_task", LV_MEM_SIZE, NULL, lv_app_task_priority, NULL);
-    xTaskCreate(sensor_task, "sensor_task", configMINIMAL_STACK_SIZE, NULL, sensor_task_priority, NULL);
-    xTaskCreate(pwm_task, "pwm_task", configMINIMAL_STACK_SIZE, NULL, pwm_task_priority, NULL);
-    xTaskCreate(pid_task, "pid_task", 2048, NULL, pid_task_priority, NULL);
+    xTaskCreate(lv_app_task, "lv_app_task", 4096UL, NULL, lv_app_task_priority, NULL);
+    // xTaskCreate(sensor_task, "sensor_task", configMINIMAL_STACK_SIZE, NULL, sensor_task_priority, NULL);
+    // xTaskCreate(pid_task, "pid_task", 2048, NULL, pid_task_priority, NULL);
+    // xTaskCreate(pwm_task, "pwm_task", configMINIMAL_STACK_SIZE, NULL, pwm_task_priority, NULL);
 
     vTaskStartScheduler();
 
@@ -101,6 +103,7 @@ int main()
 
     while (true)
     {
+        /*
         mutex_enter_blocking(&reflow_mutex);
         static absolute_time_t thread1_abt;
         uint16_t top_adc = top_max6675.sample();
@@ -121,7 +124,7 @@ int main()
         }
         mutex_exit(&reflow_mutex);
         lv_task_handler();
-        sleep_ms(5);
+        sleep_ms(5);*/
     }
     return 0;
 }
@@ -144,6 +147,39 @@ static bool lastStartedManual;
 static bool cStartedManual;
 static float startTemp;
 PID bottomPID;
+
+static void lv_app_task(void *pvParameter)
+{
+    init_display();
+    lv_app_entry();
+    for (;;)
+    {
+        lv_task_handler();
+        vTaskDelay(5);
+    }
+}
+
+static void sensor_task(void *pvParameter)
+{
+    for (;;)
+    {
+    }
+}
+
+static void pwm_task(void *pvParameter)
+{
+    for (;;)
+    {
+    }
+}
+
+static void pid_task(void *pvParameter)
+{
+    for (;;)
+    {
+    }
+}
+
 void multicore_core1()
 {
     mutex_init(&reflow_mutex);

@@ -20,7 +20,9 @@ target_link_libraries(lv_app PRIVATE lvgl)
 if(PICO_BOARD)
     target_link_libraries(lv_app PRIVATE
     AT24C16)
+    target_link_directories(HotBerry PRIVATE ../../include)
+    target_include_directories(HotBerry PRIVATE ../../include)
     target_link_libraries(lv_app PUBLIC 
-    pico_multicore
-    pico_sync)
+    FreeRTOS-Kernel-Heap4 # FreeRTOS kernel and dynamic heap
+    )
 endif()

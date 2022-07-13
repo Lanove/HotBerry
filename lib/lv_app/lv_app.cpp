@@ -110,14 +110,14 @@ lv_obj_t *app_create_chart(lv_obj_t *_parent, bool _profileGraph, uint8_t _selec
     if (profileGraph)
     {
         selectedProfile = _selectedProfile;
-        ENTER_CRITICAL_SECTION;
+        LV_APP_MUTEX_ENTER;
         dataPoint = (*pProfileLists)[selectedProfile].dataPoint;
         memcpy(targetTemperatures, (*pProfileLists)[selectedProfile].targetTemperature,
                sizeof((*pProfileLists)[selectedProfile].targetTemperature));
         memcpy(targetSeconds, (*pProfileLists)[selectedProfile].targetSecond,
                sizeof((*pProfileLists)[selectedProfile].targetSecond));
         startTopHeaterAt = (*pProfileLists)[selectedProfile].startTopHeaterAt;
-        EXIT_CRITICAL_SECTION;
+        LV_APP_MUTEX_EXIT;
         coord_counter = 0;
         if (coords == NULL && dataPoint)
             coords = (lv_point_t *)malloc(sizeof(lv_point_t) * (dataPoint));
@@ -230,9 +230,9 @@ lv_obj_t *app_create_chart(lv_obj_t *_parent, bool _profileGraph, uint8_t _selec
             [](lv_event_t *e) {
                 lv_event_code_t code = lv_event_get_code(e);
                 lv_obj_t *obj = lv_event_get_target(e);
-                ENTER_CRITICAL_SECTION;
+                LV_APP_MUTEX_ENTER;
                 Profile selectedProfileList = (*pProfileLists)[*pSelectedProfile];
-                EXIT_CRITICAL_SECTION;
+                LV_APP_MUTEX_EXIT;
                 if (code == LV_EVENT_VALUE_CHANGED)
                 {
                     last_cursor_id = lv_chart_get_pressed_point(obj);
@@ -341,7 +341,7 @@ void lv_app_entry()
     static constexpr uint32_t hotberry_stay_dur = 0;
     static constexpr uint32_t hotberry_fadeout_dur = 0;
 #endif
-    INIT_CRITICAL_SECTION;
+    LV_APP_MUTEX_INIT;
 
     lv_obj_t *scr = lv_obj_create(NULL);
     lv_scr_load(scr);
@@ -368,7 +368,7 @@ void lv_app_entry()
     app_home(hotberry_fadein_dur + hotberry_stay_dur + hotberry_fadeout_dur);
 
 #ifdef PICO_BOARD
-    ENTER_CRITICAL_SECTION;
+    LV_APP_MUTEX_ENTER;
     if (EEPROM.init(EEPROM_I2CBUS, EEPROM_SDA, EEPROM_SCL, EEPROM_BusSpeed))
         printf("EEPROM detected!\n");
     else
@@ -377,12 +377,12 @@ void lv_app_entry()
     EEPROM.memRead(sizeof(*pProfileLists), *pTopHeaterPID, sizeof(*pTopHeaterPID));
     EEPROM.memRead(sizeof(*pProfileLists) + sizeof(*pTopHeaterPID), *pBottomHeaterPID, sizeof(*pBottomHeaterPID));
     EEPROM.memRead(0, *pProfileLists, sizeof(*pProfileLists));
-    EXIT_CRITICAL_SECTION;
+    LV_APP_MUTEX_EXIT;
 #endif
     lv_timer_create(
         [](_lv_timer_t *e) {
             static uint32_t lastSecond = 0;
-            ENTER_CRITICAL_SECTION;
+            LV_APP_MUTEX_ENTER;
             cTopHeaterPV = *pTopHeaterPV;
             cBottomHeaterPV = *pBottomHeaterPV;
             cSecondsRunning = *pSecondsRunning;
@@ -390,7 +390,7 @@ void lv_app_entry()
             bool startedManual = *pStartedManual;
             uint16_t totalSecond =
                 (*pProfileLists)[*pSelectedProfile].targetSecond[(*pProfileLists)[*pSelectedProfile].dataPoint - 1];
-            EXIT_CRITICAL_SECTION;
+            LV_APP_MUTEX_EXIT;
             if (lv_scr_act() == scr_auto)
             {
                 using namespace AppAutoVar;
@@ -527,11 +527,11 @@ void app_auto(uint32_t delay)
         run_btn,
         [](lv_event_t *e) {
             lv_obj_t *run_btn_label = lv_obj_get_child(run_btn, 0);
-            ENTER_CRITICAL_SECTION;
+            LV_APP_MUTEX_ENTER;
             *pStartedAuto = !*pStartedAuto;
             bool started = *pStartedAuto;
             *pSecondsRunning = 0;
-            EXIT_CRITICAL_SECTION;
+            LV_APP_MUTEX_EXIT;
             if (started == 1)
             {
                 lv_chart_set_all_value(ChartData::chart, ChartData::topSeries, LV_CHART_POINT_NONE);
@@ -547,9 +547,9 @@ void app_auto(uint32_t delay)
     lv_obj_set_style_radius(profile_btn, 2, 0);
     lv_obj_t *profile_btn_label = lvc_btn_init(profile_btn, "", LV_ALIGN_TOP_RIGHT, -3,
                                                elem_y_offset[lv_obj_get_index(profile_btn)], &lv_font_montserrat_16);
-    ENTER_CRITICAL_SECTION;
+    LV_APP_MUTEX_ENTER;
     uint8_t dSelectedProfile = *pSelectedProfile;
-    EXIT_CRITICAL_SECTION;
+    LV_APP_MUTEX_EXIT;
     lv_label_set_text_fmt(profile_btn_label, "PROFILE %d", dSelectedProfile);
 
     // Create roll pick on profile button click
@@ -557,12 +557,12 @@ void app_auto(uint32_t delay)
         profile_btn,
         [](lv_event_t *e) {
             lv_obj_t *profile_btn = lv_event_get_target(e);
-            ENTER_CRITICAL_SECTION;
+            LV_APP_MUTEX_ENTER;
             bool started = *pStartedAuto;
             uint8_t dSelectedProfile = *pSelectedProfile;
             profile_wpd.param = pSelectedProfile;
             profile_wpd.issuer = profile_btn;
-            EXIT_CRITICAL_SECTION;
+            LV_APP_MUTEX_EXIT;
             if (started)
             {
                 modal_create_alert("Can't modify profile while auto operation is still running!");
@@ -579,9 +579,9 @@ void app_auto(uint32_t delay)
         [](lv_event_t *e) {
             lv_obj_t *profile_btn = lv_event_get_target(e);
             lv_obj_t *profile_btn_label = lv_obj_get_child(profile_btn, 0);
-            ENTER_CRITICAL_SECTION;
+            LV_APP_MUTEX_ENTER;
             uint8_t dSelectedProfile = *pSelectedProfile;
-            EXIT_CRITICAL_SECTION;
+            LV_APP_MUTEX_EXIT;
             lv_label_set_text_fmt(profile_btn_label, "PROFILE %d", dSelectedProfile);
             ChartData::deleteChart();
             chart = app_create_chart(scr_auto, true, dSelectedProfile, true, chartWidth, chartHeight);
@@ -629,9 +629,9 @@ void app_auto(uint32_t delay)
         back_btn,
         [](lv_event_t *e) {
             using namespace AppAutoVar;
-            ENTER_CRITICAL_SECTION;
+            LV_APP_MUTEX_ENTER;
             bool started = *pStartedAuto;
-            EXIT_CRITICAL_SECTION;
+            LV_APP_MUTEX_EXIT;
             if (started)
             {
                 modal_create_alert("Can't go home while auto operation is still running!");
@@ -700,11 +700,11 @@ void app_manual(uint32_t delay)
         run_btn,
         [](lv_event_t *e) {
             lv_obj_t *run_btn_label = lv_obj_get_child(run_btn, 0);
-            ENTER_CRITICAL_SECTION;
+            LV_APP_MUTEX_ENTER;
             *pStartedManual = !*pStartedManual;
             bool started = *pStartedManual;
             *pSecondsRunning = 0;
-            EXIT_CRITICAL_SECTION;
+            LV_APP_MUTEX_EXIT;
             if (started == 1)
             {
                 lv_chart_set_all_value(ChartData::chart, ChartData::topSeries, LV_CHART_POINT_NONE);
@@ -739,9 +739,9 @@ void app_manual(uint32_t delay)
         lv_label_set_text(heater_label, heater_label_msg[i]);
         lv_obj_t *sv_label = lv_label_create(heater[i]);
         lvc_label_init(sv_label, &lv_font_montserrat_12, LV_ALIGN_TOP_RIGHT, 10, -7, bs_white);
-        ENTER_CRITICAL_SECTION;
+        LV_APP_MUTEX_ENTER;
         lv_label_set_text_fmt(sv_label, "SV : %d°C", (i == 0) ? *pTopHeaterSV : *pBottomHeaterSV);
-        EXIT_CRITICAL_SECTION;
+        LV_APP_MUTEX_EXIT;
         lv_obj_add_event_cb(
             heater[i],
             [](lv_event_t *e) {
@@ -749,17 +749,17 @@ void app_manual(uint32_t delay)
                 if (target == heater[0])
                 { // Top heater
                     topHeater_wpd.issuer = target;
-                    ENTER_CRITICAL_SECTION;
+                    LV_APP_MUTEX_ENTER;
                     topHeater_wpd.param = pTopHeaterSV;
-                    EXIT_CRITICAL_SECTION;
+                    LV_APP_MUTEX_EXIT;
                     modal_create_input_number(&topHeater_wpd, false, 3, "Set Top Heater SV");
                 }
                 else
                 { // Top heater
                     bottomHeater_wpd.issuer = target;
-                    ENTER_CRITICAL_SECTION;
+                    LV_APP_MUTEX_ENTER;
                     bottomHeater_wpd.param = pBottomHeaterSV;
-                    EXIT_CRITICAL_SECTION;
+                    LV_APP_MUTEX_EXIT;
                     modal_create_input_number(&bottomHeater_wpd, false, 3, "Set Bottom Heater SV");
                 }
             },
@@ -769,9 +769,9 @@ void app_manual(uint32_t delay)
             [](lv_event_t *e) {
                 lv_obj_t *target = lv_event_get_target(e);
                 lv_obj_t *sv_label = lv_obj_get_child(target, 3);
-                ENTER_CRITICAL_SECTION;
+                LV_APP_MUTEX_ENTER;
                 lv_label_set_text_fmt(sv_label, "SV : %d°C", (target == heater[0]) ? *pTopHeaterSV : *pBottomHeaterSV);
-                EXIT_CRITICAL_SECTION;
+                LV_APP_MUTEX_EXIT;
             },
             LV_EVENT_REFRESH, NULL);
         app_anim_y(heater[i], delay, elem_y_offset[lv_obj_get_index(heater[i])], false);
@@ -787,9 +787,9 @@ void app_manual(uint32_t delay)
         back_btn,
         [](lv_event_t *e) {
             using namespace AppManualVar;
-            ENTER_CRITICAL_SECTION;
+            LV_APP_MUTEX_ENTER;
             bool started = *pStartedManual;
-            EXIT_CRITICAL_SECTION;
+            LV_APP_MUTEX_EXIT;
             if (started)
             {
                 modal_create_alert("Can't go home while manual operation is still running!");
@@ -838,9 +838,9 @@ void app_profiles(uint32_t delay)
 
     modified = false;
 
-    ENTER_CRITICAL_SECTION;
+    LV_APP_MUTEX_ENTER;
     memcpy(&tempProfile, &(*pProfileLists)[*pSelectedProfile], sizeof(Profile));
-    EXIT_CRITICAL_SECTION;
+    LV_APP_MUTEX_EXIT;
 
     scr_profiles = lv_obj_create(NULL);
     lv_scr_load_anim(scr_profiles, LV_SCR_LOAD_ANIM_NONE, 0, delay, true);
@@ -905,10 +905,10 @@ void app_profiles(uint32_t delay)
 
     profile_btn = lv_btn_create(header);
     profile_wpd.issuer = profile_btn;
-    ENTER_CRITICAL_SECTION;
+    LV_APP_MUTEX_ENTER;
     profile_wpd.param = pSelectedProfile;
     uint8_t dSelectedProfile = *pSelectedProfile;
-    EXIT_CRITICAL_SECTION;
+    LV_APP_MUTEX_EXIT;
     lv_obj_t *profile_btn_label = lvc_btn_init(profile_btn, "", LV_ALIGN_RIGHT_MID, 0, 0, &lv_font_montserrat_20);
     lv_label_set_text_fmt(profile_btn_label, "PROFILE %d", dSelectedProfile);
 
@@ -934,9 +934,9 @@ void app_profiles(uint32_t delay)
             uint8_t dSelectedProfile;
             if (eventParameter_wpd == &confirm_wpd)
             { // If the parameter is confirm_wpd then we are ordered to create rollpick
-                ENTER_CRITICAL_SECTION;
+                LV_APP_MUTEX_ENTER;
                 dSelectedProfile = *pSelectedProfile;
-                EXIT_CRITICAL_SECTION;
+                LV_APP_MUTEX_EXIT;
 
                 lv_obj_t *rollpick =
                     rollpick_create(&profile_wpd, "Choose Profile", profile_roller_list, &lv_font_montserrat_20);
@@ -948,10 +948,10 @@ void app_profiles(uint32_t delay)
             lv_obj_t *profile_btn = lv_event_get_target(e);
             lv_obj_t *profile_btn_label = lv_obj_get_child(profile_btn, 0);
 
-            ENTER_CRITICAL_SECTION;
+            LV_APP_MUTEX_ENTER;
             memcpy(&tempProfile, &(*pProfileLists)[*pSelectedProfile], sizeof(Profile));
             dSelectedProfile = *pSelectedProfile;
-            EXIT_CRITICAL_SECTION;
+            LV_APP_MUTEX_EXIT;
 
             lv_label_set_text_fmt(profile_btn_label, "PROFILE %d", dSelectedProfile);
             char buf[16];
@@ -983,9 +983,9 @@ void app_profiles(uint32_t delay)
     lv_obj_add_event_cb( // Draw a profile view of current selected profile
         drawBtn,
         [](lv_event_t *e) {
-            ENTER_CRITICAL_SECTION;
+            LV_APP_MUTEX_ENTER;
             uint8_t dSelectedProfile = *pSelectedProfile;
-            EXIT_CRITICAL_SECTION;
+            LV_APP_MUTEX_EXIT;
             lv_obj_t *overlay = lvc_create_overlay();
             lv_obj_set_style_pad_all(overlay, 5, 0);
             lv_obj_t *modal = lv_obj_create(overlay);
@@ -1032,9 +1032,9 @@ void app_profiles(uint32_t delay)
                     targetTemperature_txt[0] == '\0' ? 0 : std::stol(targetTemperature_txt);
             }
 
-            ENTER_CRITICAL_SECTION;
+            LV_APP_MUTEX_ENTER;
             memcpy(&(*pProfileLists)[*pSelectedProfile], &tempProfile, sizeof(Profile));
-            EXIT_CRITICAL_SECTION;
+            LV_APP_MUTEX_EXIT;
 #ifdef PICO_BOARD
             if (EEPROM.init(
                     EEPROM_I2CBUS, EEPROM_SDA, EEPROM_SCL,
@@ -1239,10 +1239,10 @@ void app_settings(uint32_t delay)
             {
                 float tval = std::stof(lv_textarea_get_text(lv_obj_get_child(topHeater_cont, 2 * (i + 1))));
                 float bval = std::stof(lv_textarea_get_text(lv_obj_get_child(bottomHeater_cont, 2 * (i + 1))));
-                ENTER_CRITICAL_SECTION;
+                LV_APP_MUTEX_ENTER;
                 (*pTopHeaterPID)[i] = tval;
                 (*pBottomHeaterPID)[i] = bval;
-                EXIT_CRITICAL_SECTION;
+                LV_APP_MUTEX_EXIT;
             }
 #ifdef PICO_BOARD
 
@@ -1295,9 +1295,9 @@ void app_settings(uint32_t delay)
             lv_obj_t *pid_label = lv_label_create(cont);
             lvc_label_init(pid_label, &lv_font_montserrat_20, LV_ALIGN_TOP_LEFT, ta_x_offs[y], ta_y_offs[y]);
             lv_obj_t *pid_ta = createTextArea(cont, pidIsFloat ? 10 : 4, 100, pidIsFloat, LV_ALIGN_TOP_LEFT, 0, 0);
-            ENTER_CRITICAL_SECTION;
+            LV_APP_MUTEX_ENTER;
             sprintf(ta_buf, "%f", i == 0 ? (*pTopHeaterPID)[y] : (*pBottomHeaterPID)[y]);
-            EXIT_CRITICAL_SECTION;
+            LV_APP_MUTEX_EXIT;
             lv_textarea_set_text(pid_ta, ta_buf);
             lv_obj_align_to(pid_ta, pid_label, LV_ALIGN_OUT_RIGHT_MID, -10 - ta_x_offs[y], 0);
             lv_label_set_text(pid_label, msg[y]);
@@ -1365,9 +1365,9 @@ lv_obj_t *rollpick_create(WidgetParameterData *wpd, const char *headerTitle, con
             lv_obj_t *overlay = lv_obj_get_parent(modal);
             lv_obj_t *modalRoller = lv_obj_get_child(modal, 1);
             WidgetParameterData *wpd = (WidgetParameterData *)lv_event_get_user_data(event);
-            ENTER_CRITICAL_SECTION;
+            LV_APP_MUTEX_ENTER;
             *(uint16_t *)wpd->param = lv_roller_get_selected(modalRoller);
-            EXIT_CRITICAL_SECTION;
+            LV_APP_MUTEX_EXIT;
             // Get selected roller value
             lv_event_send(wpd->issuer, LV_EVENT_REFRESH, wpd);
             // Exit from modal

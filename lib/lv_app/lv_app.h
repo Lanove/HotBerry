@@ -11,23 +11,22 @@
 #include "globals.h"
 #include "pico/stdlib.h"
 #include <AT24C16.h>
-#include "pico/sync.h"
-static mutex_t lv_app_mutex;
+#include "FreeRTOS.h"
+#include "semphr.h"
+#include "task.h"
+static SemaphoreHandle_t lv_app_mutex;
 extern AT24C16 EEPROM;
 static constexpr uint32_t EEPROM_SDA = 0;
 static constexpr uint32_t EEPROM_SCL = 1;
 static constexpr uint32_t EEPROM_BusSpeed = 400000;
 static constexpr i2c_inst_t* EEPROM_I2CBUS = i2c_default;
-// #define ENTER_CRITICAL_SECTION mutex_enter_blocking(&lv_app_mutex)
-// #define EXIT_CRITICAL_SECTION mutex_exit(&lv_app_mutex)
-// #define INIT_CRITICAL_SECTION mutex_init(&lv_app_mutex)
-#define ENTER_CRITICAL_SECTION
-#define EXIT_CRITICAL_SECTION
-#define INIT_CRITICAL_SECTION
+#define LV_APP_MUTEX_ENTER xSemaphoreTake(lv_app_mutex,portMAX_DELAY)
+#define LV_APP_MUTEX_EXIT xSemaphoreGive(lv_app_mutex)
+#define LV_APP_MUTEX_INIT lv_app_mutex = xSemaphoreCreateMutex()
 #else
-#define ENTER_CRITICAL_SECTION
-#define EXIT_CRITICAL_SECTION
-#define INIT_CRITICAL_SECTION
+#define LV_APP_MUTEX_ENTER
+#define LV_APP_MUTEX_EXIT
+#define LV_APP_MUTEX_INIT
 #endif
 
 #define USE_INTRO 0
