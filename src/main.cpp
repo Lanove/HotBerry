@@ -36,8 +36,8 @@ static uint32_t bottomHeaterSV = 70;
 static uint32_t topHeaterSV = 150;
 static bool startedAuto;
 static bool startedManual;
-static float topHeaterPID[3];
-static float bottomHeaterPID[3];
+static double topHeaterPID[4];
+static double bottomHeaterPID[4];
 static uint16_t selectedProfile = 0;
 static Profile profileLists[10];
 
@@ -59,17 +59,20 @@ static void pid_task(void *pvParameter);
 bool pwm_timer_cb(repeating_timer_t *rt);
 static constexpr uint16_t pwm_resolution = 1000;
 static QueueHandle_t pwm_ssr0_queue = NULL;
+static QueueHandle_t pwm_ssr1_queue = NULL;
 uint16_t pwm_ssr0 = 100;
 uint16_t pwm_ssr1 = 100;
 uint16_t pwm_counter = 0;
 struct repeating_timer pwm_timer;
-PIDController PID_bottomHeater;
+PIDController PID_bottomHeater, PID_topHeater;
 
 int main()
 {
     stdio_init_all();
-    while (!tud_cdc_connected())
-        sleep_ms(100);
+
+    // while (!tud_cdc_connected())
+    //     sleep_ms(100);
+
     if (!set_sys_clock_khz(cpu_freq_mhz * 1000, false))
         printf("set system clock to %dMHz failed\n", cpu_freq_mhz);
     else
@@ -101,11 +104,7 @@ int main()
     LV_APP_MUTEX_INIT;
     sensor_mutex = xSemaphoreCreateMutex();
     pwm_ssr0_queue = xQueueCreate(1, sizeof(uint32_t));
-
-    if (pwm_ssr0_queue == NULL)
-        printf("failed creating queue\n");
-    else
-        printf("success creating queue\n");
+    pwm_ssr1_queue = xQueueCreate(1, sizeof(uint32_t));
 
     add_repeating_timer_us(-500, pwm_timer_cb, NULL, &pwm_timer);
 
@@ -126,6 +125,7 @@ bool pwm_timer_cb(repeating_timer_t *rt)
     static uint16_t c_pwm_ssr1 = 0;
 
     xQueueReceiveFromISR(pwm_ssr0_queue, &c_pwm_ssr0, NULL);
+    xQueueReceiveFromISR(pwm_ssr1_queue, &c_pwm_ssr1, NULL);
 
     pwm_counter++;
     if (pwm_counter >= c_pwm_ssr0 && c_pwm_ssr0 != pwm_resolution)
@@ -174,12 +174,18 @@ static void sensor_task(void *pvParameter)
 
 static void pid_task(void *pvParameter)
 {
+    // Kp = controller gain
+    // Ki = w1 * P
+    // Kd = P / w2
     static constexpr float PID_sampleTime = 1.0f;
-    static constexpr float PID_derivativeTau = .3f; // Pole at 3.333 or 1/0.3
+    static constexpr float PID_derivativeTau = 2.161931848f;
     bool lastStartedManual;
     PIDController_Init(&PID_bottomHeater);
-    PIDController_SetIntegralLimit(&PID_bottomHeater, 0.0f, 1.0f);
+    PIDController_SetIntegralLimit(&PID_bottomHeater, 0.f, 1.0f);
     PIDController_SetOutputLimit(&PID_bottomHeater, 0.0f, 1.0f);
+    PIDController_Init(&PID_topHeater);
+    PIDController_SetIntegralLimit(&PID_topHeater, 0.f, 1.0f);
+    PIDController_SetOutputLimit(&PID_topHeater, 0.0f, 1.0f);
     for (;;)
     {
         xSemaphoreTake(sensor_mutex, portMAX_DELAY);
@@ -200,17 +206,33 @@ static void pid_task(void *pvParameter)
             PIDController_SetTuning(&PID_bottomHeater, bottomHeaterPID[0], bottomHeaterPID[1], bottomHeaterPID[2],
                                     PID_sampleTime, PID_derivativeTau);
             PID_bottomHeater.prevMeasurement = bottomHeaterPV_f;
-            printf("Starting P %f I %f D %f sampleTime %.1f tau %f\n", PID_bottomHeater.Kp, PID_bottomHeater.Ki,
+
+            PIDController_Init(&PID_topHeater);
+            pwm_ssr1 = 0;
+            PIDController_SetTuning(&PID_topHeater, topHeaterPID[0], topHeaterPID[1], topHeaterPID[2], PID_sampleTime,
+                                    PID_derivativeTau);
+            PID_topHeater.prevMeasurement = topHeaterPV_f;
+
+            printf("topHeater P %f I %f D %f sampleTime %.1f tau %f\n", PID_topHeater.Kp, PID_topHeater.Ki,
+                   PID_topHeater.Kd, PID_sampleTime, PID_derivativeTau);
+            printf("bottomHeater P %f I %f D %f sampleTime %.1f tau %f\n", PID_bottomHeater.Kp, PID_bottomHeater.Ki,
                    PID_bottomHeater.Kd, PID_sampleTime, PID_derivativeTau);
         }
 
         if (startedManual)
         {
             PIDController_Compute(&PID_bottomHeater, (pid_variable_t)bottomHeaterSV, (pid_variable_t)bottomHeaterPV_f);
+            PIDController_Compute(&PID_topHeater, (pid_variable_t)topHeaterSV, (pid_variable_t)topHeaterPV_f);
+
             // seconds;pv;output;p;i;d;error;sv
-            printf("%d;%.2f;%.3f;%.3f;%.3f;%.3f;%.2f;%.2f\n", secondsRunning, PID_bottomHeater.prevMeasurement,
-                   PID_bottomHeater.out, PID_bottomHeater.proportional, PID_bottomHeater.integrator,
-                   PID_bottomHeater.differentiator, PID_bottomHeater.prevError, PID_bottomHeater.setPoint);
+
+            // printf("%d;%.2f;%.3f;%.3f;%.3f;%.3f;%.2f;%.2f\n", secondsRunning, PID_bottomHeater.prevMeasurement,
+            //        PID_bottomHeater.out, PID_bottomHeater.proportional, PID_bottomHeater.integrator,
+            //        PID_bottomHeater.differentiator, PID_bottomHeater.prevError, PID_bottomHeater.setPoint);
+
+            printf("%d;%.2f;%.3f;%.3f;%.3f;%.3f;%.2f;%.2f\n", secondsRunning, PID_topHeater.prevMeasurement,
+                   PID_topHeater.out, PID_topHeater.proportional, PID_topHeater.integrator,
+                   PID_topHeater.differentiator, PID_topHeater.prevError, PID_topHeater.setPoint);
         }
 
         if (startedManual)
@@ -218,7 +240,13 @@ static void pid_task(void *pvParameter)
         else
             pwm_ssr0 = 0;
 
+        if (startedManual)
+            pwm_ssr1 = (uint16_t)(PID_topHeater.out * 1000.);
+        else
+            pwm_ssr1 = 0;
+
         xQueueSend(pwm_ssr0_queue, &pwm_ssr0, portMAX_DELAY);
+        xQueueSend(pwm_ssr1_queue, &pwm_ssr1, portMAX_DELAY);
 
         lastStartedManual = startedManual;
         xSemaphoreGive(lv_app_mutex);

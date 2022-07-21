@@ -70,8 +70,8 @@ extern Profile (*pProfileLists)[10];
 extern uint16_t *pSelectedProfile;
 extern uint32_t *pBottomHeaterSV;
 extern uint32_t *pTopHeaterSV;
-extern float (*pTopHeaterPID)[3];
-extern float (*pBottomHeaterPID)[3];
+extern double (*pTopHeaterPID)[4];
+extern double (*pBottomHeaterPID)[4];
 extern bool *pStartedAuto;
 extern bool *pStartedManual;
 } // namespace lv_app_pointers

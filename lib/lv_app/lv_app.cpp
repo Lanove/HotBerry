@@ -25,9 +25,9 @@ uint32_t *pBottomHeaterSV;
 uint32_t *pTopHeaterSV;
 bool *pStartedAuto;
 bool *pStartedManual;
-float (*pTopHeaterPID)[3];
+double (*pTopHeaterPID)[4];
 uint16_t *pSelectedProfile;
-float (*pBottomHeaterPID)[3];
+double (*pBottomHeaterPID)[4];
 Profile (*pProfileLists)[10];
 } // namespace lv_app_pointers
 using namespace lv_app_pointers;
@@ -136,7 +136,7 @@ lv_obj_t *app_create_chart(lv_obj_t *_parent, bool _profileGraph, uint8_t _selec
     else
     {
         totalSecond = manual_max_run_seconds;
-        highestTemperature = 100;
+        highestTemperature = 400;
     }
     chart = lv_chart_create(parent);
     lv_chart_set_type(chart, LV_CHART_TYPE_LINE);
@@ -1237,8 +1237,8 @@ void app_settings(uint32_t delay)
         [](lv_event_t *e) {
             for (int i = 0; i < 3; i++)
             {
-                float tval = std::stof(lv_textarea_get_text(lv_obj_get_child(topHeater_cont, 2 * (i + 1))));
-                float bval = std::stof(lv_textarea_get_text(lv_obj_get_child(bottomHeater_cont, 2 * (i + 1))));
+                double tval = std::stod(lv_textarea_get_text(lv_obj_get_child(topHeater_cont, 2 * (i + 1))));
+                double bval = std::stod(lv_textarea_get_text(lv_obj_get_child(bottomHeater_cont, 2 * (i + 1))));
                 LV_APP_MUTEX_ENTER;
                 (*pTopHeaterPID)[i] = tval;
                 (*pBottomHeaterPID)[i] = bval;
@@ -1270,7 +1270,7 @@ void app_settings(uint32_t delay)
     lv_img_set_src(logo, &hotberry_logo);
     lv_obj_align_to(logo, back, LV_ALIGN_OUT_RIGHT_MID, -20, 0);
     lv_img_set_zoom(logo, 190);
-    
+
     lv_obj_t *settings_label = lv_label_create(header);
     lvc_label_init(settings_label, &lv_font_montserrat_24, LV_ALIGN_RIGHT_MID, 0, 0, bs_white);
     lv_label_set_text_static(settings_label, "SETTINGS");

@@ -19,7 +19,7 @@ void PIDController_SetTuning(PIDController *pid, pid_variable_t kp, pid_variable
     pid->Ki = ki;
     pid->Kd = kd;
     pid->T = sampleTime;
-    pid->tau = tau;
+    pid->tau = 0.00;
 }
 
 void PIDController_Init(PIDController *pid)
@@ -52,12 +52,13 @@ pid_variable_t PIDController_Compute(PIDController *pid, pid_variable_t setpoint
     else if (pid->integrator < pid->limMinInt)
         pid->integrator = pid->limMinInt;
 
+    /*
     pid->differentiator =
-        -(2.0f * pid->Kd *
-              (measurement -
-               pid->prevMeasurement) /* Note: derivative on measurement, therefore minus sign in front of equation! */
-          + (2.0f * pid->tau - pid->T) * pid->differentiator) /
+        -(2.0f * pid->Kd * (measurement - pid->prevMeasurement) + (2.0f * pid->tau - pid->T) * pid->differentiator) /
         (2.0f * pid->tau + pid->T);
+    */
+
+    pid->differentiator = -((pid->Kd / pid->T) * (measurement - pid->prevMeasurement));
 
     /*
      * Compute output and apply limits
