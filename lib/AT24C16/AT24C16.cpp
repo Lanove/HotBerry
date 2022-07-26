@@ -136,16 +136,22 @@ void AT24C16::pageWrite(uint16_t address, const uint8_t *src, uint8_t len)
         return;
     const uint8_t *src_b = src;
     uint8_t wordAddress = address & 0xFF;
+
+    // Write the address to bus
     i2c_write_blocking(i2c_inst, AT24C16_i2cAddress | ((address >> 8) & 0x07), &wordAddress, 1, true);
+    
+    // Write the data to bus
     for (size_t i = 0; i < len; ++i)
     {
         while (!i2c_get_write_available(i2c_inst))
             tight_loop_contents();
+        // Send stop bit if we're on last bit
         i2c_get_hw(i2c_inst)->data_cmd = (i == len - 1) ? *src_b++ | (1 << 9) : *src_b++;
     }
     // From Datasheet
     // tWR max 5ms
-    // Note: 1. The write cycle time tWR is the time from a valid stop condition of a write sequence to the end of the
+    // Note: 1. The write cycle time tWR is the time 
+    // from a valid stop condition of a write sequence to the end of the
     // internal clear/write cycle
     vTaskDelay(7 / portTICK_PERIOD_MS);
 }

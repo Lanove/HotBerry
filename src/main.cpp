@@ -81,6 +81,12 @@ int main()
 {
     stdio_init_all();
 
+    // Overlock RP2040 to 250MHz
+    if (!set_sys_clock_khz(cpu_freq_mhz * 1000, false))
+        printf("set system clock to %dMHz failed\n", cpu_freq_mhz);
+    else
+        printf("system clock is now %dMHz\n", cpu_freq_mhz);
+
     // Initialize shift register (only used for SSR PWM)
     sft.init();
 
@@ -188,7 +194,7 @@ static void sensor_task(void *pvParameter)
         adc_topHeater.reading(top_adc);
         adc_bottomHeater.reading(bottom_adc);
         xSemaphoreGive(sensor_mutex);
-        
+
         vTaskDelay(200 / portTICK_PERIOD_MS);
     }
 }
@@ -220,7 +226,7 @@ static void pid_task(void *pvParameter)
         // Update the PV that is used for lv_app
         topHeaterPV = topHeaterPV_f;
         bottomHeaterPV = bottomHeaterPV_f;
-        
+
         // If either started flag is true, we increment the secondsRunning
         if (startedAuto || startedManual)
             secondsRunning++;
