@@ -1,3 +1,15 @@
+/**
+ * @file main.cpp
+ * @author figoarzaki123@gmail.com / 5022221041@mhs.its.ac.id
+ * @brief This is the main program for HotBerry, The program runs using FreeRTOS SMP Kernel
+ * @version 1.0
+ * @date 2022-07-26
+ *
+ * @copyright Copyright (c) 2022
+ * @todo Auto operation is not yet implemented because the profile graph
+ * somehow bugged and not drawn when the profile total second is >= 373
+ */
+
 #include "FreeRTOS.h"
 #include "HC595.h"
 #include "MAX6675.h"
@@ -17,73 +29,62 @@
 #include "task.h"
 #include <tusb.h>
 
-#define HIGH 1
-#define LOW 0
+void blinkStatusLED();
+static void lv_app_task(void *pvParameter);
+static void sensor_task(void *pvParameter);
+static void pid_task(void *pvParameter);
 
 HC595 sft(SFT_DATA, SFT_LATCH, SFT_CLOCK);
 MAX6675 top_max6675(THERM_DATA, THERM_SCK, THERM_CS);
 MAX6675 bottom_max6675(THERM_DATA, THERM_SCK, UART0_RX);
 movingAvg adc_topHeater(10);
 movingAvg adc_bottomHeater(10);
+PIDController PID_bottomHeater, PID_topHeater;
 
-// Read-only pointers
 static uint32_t bottomHeaterPV = 0;
 static uint32_t topHeaterPV = 0;
-static uint32_t secondsRunning = 0;
+static uint32_t bottomHeaterSV = 300;
+static uint32_t topHeaterSV = 0;
 
-// Read and write pointers
-static uint32_t bottomHeaterSV = 70;
-static uint32_t topHeaterSV = 150;
+static uint32_t secondsRunning = 0;
 static bool startedAuto;
 static bool startedManual;
-static double topHeaterPID[4];
-static double bottomHeaterPID[4];
 static uint16_t selectedProfile = 0;
 static Profile profileLists[10];
+
+// Variable to store PID constants, P I D and tau consecutively
+static double topHeaterPID[4];
+static double bottomHeaterPID[4];
 
 static constexpr UBaseType_t lv_app_task_priority = (tskIDLE_PRIORITY + 1);
 static constexpr UBaseType_t sensor_task_priority = (tskIDLE_PRIORITY + 2);
 static constexpr UBaseType_t pid_task_priority = (tskIDLE_PRIORITY + 3);
-
+static constexpr uint32_t lv_app_task_stack_size = 8192UL;
+static constexpr uint32_t sensor_task_stack_size = configMINIMAL_STACK_SIZE;
+static constexpr uint32_t pid_task_stack_size = 1024UL;
 static TaskHandle_t lv_app_task_handle;
 static TaskHandle_t sensor_task_handle;
 static TaskHandle_t pid_task_handle;
-
 static SemaphoreHandle_t sensor_mutex;
-
-void blinkStatusLED();
-static void lv_app_task(void *pvParameter);
-static void sensor_task(void *pvParameter);
-static void pid_task(void *pvParameter);
 
 bool pwm_timer_cb(repeating_timer_t *rt);
 static constexpr uint16_t pwm_resolution = 1000;
+static constexpr int64_t pwm_period = -500; // in microseconds, negative to make the timer repeated infinitely
 static QueueHandle_t pwm_ssr0_queue = NULL;
 static QueueHandle_t pwm_ssr1_queue = NULL;
-uint16_t pwm_ssr0 = 100;
-uint16_t pwm_ssr1 = 100;
-uint16_t pwm_counter = 0;
+uint16_t pwm_ssr0;
+uint16_t pwm_ssr1;
+uint16_t pwm_counter;
 struct repeating_timer pwm_timer;
-PIDController PID_bottomHeater, PID_topHeater;
 
 int main()
 {
     stdio_init_all();
 
-    // while (!tud_cdc_connected())
-    //     sleep_ms(100);
-
-    if (!set_sys_clock_khz(cpu_freq_mhz * 1000, false))
-        printf("set system clock to %dMHz failed\n", cpu_freq_mhz);
-    else
-        printf("system clock is now %dMHz\n", cpu_freq_mhz);
-
-#ifdef FREE_RTOS_KERNEL_SMP
-    printf("Using FreeRTOS SMP Kernel\n");
-#endif
-
+    // Initialize shift register (only used for SSR PWM)
     sft.init();
 
+    // Initializer pointers used for lv_app
     {
         using namespace lv_app_pointers;
 
@@ -101,20 +102,23 @@ int main()
         pProfileLists = &profileLists;
     }
 
-    LV_APP_MUTEX_INIT;
+    // Initialize mutex and queues used later for RTOS tasks
+    lv_app_mutex = xSemaphoreCreateMutex();
     sensor_mutex = xSemaphoreCreateMutex();
     pwm_ssr0_queue = xQueueCreate(1, sizeof(uint32_t));
     pwm_ssr1_queue = xQueueCreate(1, sizeof(uint32_t));
 
-    add_repeating_timer_us(-500, pwm_timer_cb, NULL, &pwm_timer);
+    add_repeating_timer_us(pwm_period, pwm_timer_cb, NULL, &pwm_timer);
 
-    xTaskCreate(lv_app_task, "lv_app_task", 8192UL, NULL, lv_app_task_priority, &lv_app_task_handle);
-    xTaskCreate(sensor_task, "sensor_task", configMINIMAL_STACK_SIZE, NULL, sensor_task_priority, &sensor_task_handle);
-    xTaskCreate(pid_task, "pid_task", 1024UL, NULL, pid_task_priority, &pid_task_handle);
+    // Create RTOS tasks
+    xTaskCreate(lv_app_task, "lv_app_task", lv_app_task_stack_size, NULL, lv_app_task_priority, &lv_app_task_handle);
+    xTaskCreate(sensor_task, "sensor_task", sensor_task_stack_size, NULL, sensor_task_priority, &sensor_task_handle);
+    xTaskCreate(pid_task, "pid_task", pid_task_stack_size, NULL, pid_task_priority, &pid_task_handle);
 
+    // Start the RTOS scheduler, the created tasks will run after this point
     vTaskStartScheduler();
 
-    while (true)
+    while (true) // Do nothing because all stuffs is done on RTOS tasks
         ;
     return 0;
 }
@@ -124,29 +128,42 @@ bool pwm_timer_cb(repeating_timer_t *rt)
     static uint16_t c_pwm_ssr0 = 0;
     static uint16_t c_pwm_ssr1 = 0;
 
+    // Check queue for any data, if there is some data, put it on corresponding c_pwm_ssrx
     xQueueReceiveFromISR(pwm_ssr0_queue, &c_pwm_ssr0, NULL);
     xQueueReceiveFromISR(pwm_ssr1_queue, &c_pwm_ssr1, NULL);
 
+    // Software PWM implementation :
     pwm_counter++;
+    // Turn off the output if the counter is exceeding the pwm value, but don't turn the output off if the pwm value is
+    // on maximal value
     if (pwm_counter >= c_pwm_ssr0 && c_pwm_ssr0 != pwm_resolution)
         sft.writePin(SFTO::SSR0, 0);
     if (pwm_counter >= c_pwm_ssr1 && c_pwm_ssr1 != pwm_resolution)
         sft.writePin(SFTO::SSR1, 0);
+
+    // Reset the counter if the counter exceed maximal value or resolution
+    // Also reset the output by setting it to HIGH
     if (pwm_counter >= pwm_resolution)
     {
+        pwm_counter = 0;
         if (c_pwm_ssr0 != 0)
             sft.writePin(SFTO::SSR0, 1);
         if (c_pwm_ssr1 != 0)
             sft.writePin(SFTO::SSR1, 1);
-        pwm_counter = 0;
     }
+
+    // must return true, otherwise the timer is not repeated
     return true;
 }
 
+// All lvgl and display related task is here
 static void lv_app_task(void *pvParameter)
 {
+    // Initialize ILI9486 display and LVGL
     init_display();
+    // Enter the lv_app
     lv_app_entry();
+
     for (;;)
     {
         lv_task_handler();
@@ -154,6 +171,7 @@ static void lv_app_task(void *pvParameter)
     }
 }
 
+// Task to sample MAX6675 thermocouple every 200ms (MAX6675 conversion time is 170ms)
 static void sensor_task(void *pvParameter)
 {
     top_max6675.init();
@@ -164,10 +182,13 @@ static void sensor_task(void *pvParameter)
     {
         uint16_t top_adc = top_max6675.sample();
         uint16_t bottom_adc = bottom_max6675.sample();
+
         xSemaphoreTake(sensor_mutex, portMAX_DELAY);
+        // Add the new adc readout to the moving average
         adc_topHeater.reading(top_adc);
         adc_bottomHeater.reading(bottom_adc);
         xSemaphoreGive(sensor_mutex);
+        
         vTaskDelay(200 / portTICK_PERIOD_MS);
     }
 }
@@ -189,16 +210,22 @@ static void pid_task(void *pvParameter)
     for (;;)
     {
         xSemaphoreTake(sensor_mutex, portMAX_DELAY);
+        // Calculate the adc readout to temperature in celcius
         float topHeaterPV_f = MAX6675::toCelcius(adc_topHeater.getAvg());
         float bottomHeaterPV_f = MAX6675::toCelcius(adc_bottomHeater.getAvg());
         xSemaphoreGive(sensor_mutex);
 
         xSemaphoreTake(lv_app_mutex, portMAX_DELAY);
+
+        // Update the PV that is used for lv_app
         topHeaterPV = topHeaterPV_f;
         bottomHeaterPV = bottomHeaterPV_f;
+        
+        // If either started flag is true, we increment the secondsRunning
         if (startedAuto || startedManual)
             secondsRunning++;
 
+        // Initialize PID on the rising edge of startedManual flag
         if (lastStartedManual != startedManual && startedManual == 1)
         {
             PIDController_Init(&PID_bottomHeater);
@@ -219,25 +246,17 @@ static void pid_task(void *pvParameter)
                    PID_bottomHeater.Kd, PID_sampleTime, PID_derivativeTau);
         }
 
+        // Compute the PIDs
         if (startedManual)
         {
             PIDController_Compute(&PID_bottomHeater, (pid_variable_t)bottomHeaterSV, (pid_variable_t)bottomHeaterPV_f);
             PIDController_Compute(&PID_topHeater, (pid_variable_t)topHeaterSV, (pid_variable_t)topHeaterPV_f);
-
-            // seconds;pv;output;p;i;d;error;sv
-
-            // printf("%d;%.2f;%.3f;%.3f;%.3f;%.3f;%.2f;%.2f\n", secondsRunning, PID_bottomHeater.prevMeasurement,
-            //        PID_bottomHeater.out, PID_bottomHeater.proportional, PID_bottomHeater.integrator,
-            //        PID_bottomHeater.differentiator, PID_bottomHeater.prevError, PID_bottomHeater.setPoint);
-
-            printf("%d;%.2f;%.3f;%.3f;%.3f;%.3f;%.2f;%.2f\n", secondsRunning, PID_topHeater.prevMeasurement,
-                   PID_topHeater.out, PID_topHeater.proportional, PID_topHeater.integrator,
-                   PID_topHeater.differentiator, PID_topHeater.prevError, PID_topHeater.setPoint);
         }
 
+        // Apply PID output to PWM if the startedManual flag is true
         if (startedManual)
             pwm_ssr0 = (uint16_t)(PID_bottomHeater.out * 1000.);
-        else
+        else // Set the PWM value to 0 if startedManual is false
             pwm_ssr0 = 0;
 
         if (startedManual)
@@ -245,11 +264,13 @@ static void pid_task(void *pvParameter)
         else
             pwm_ssr1 = 0;
 
+        // Send the current computed PWM value to the queue
         xQueueSend(pwm_ssr0_queue, &pwm_ssr0, portMAX_DELAY);
         xQueueSend(pwm_ssr1_queue, &pwm_ssr1, portMAX_DELAY);
 
         lastStartedManual = startedManual;
         xSemaphoreGive(lv_app_mutex);
+
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 }

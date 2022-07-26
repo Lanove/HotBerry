@@ -10,8 +10,8 @@ static lv_disp_draw_buf_t lv_display_buffer;
 static lv_color_t lv_color_buffer[displayBufferSize]; //
 // static lv_color_t buf2[displayBufferSize];
 
-/*Initialize the (dummy) input device driver*/
 static lv_indev_drv_t lv_input_device;
+
 static repeating_timer lv_tick_timer;
 
 uint8_t tft_dataPins[8] = {TFT_D0, TFT_D1, TFT_D2, TFT_D3, TFT_D4, TFT_D5, TFT_D6, TFT_D7};
@@ -23,8 +23,11 @@ void init_display()
                               TOUCH_YM, TOUCH_XP_ADC_CHANNEL, TOUCH_YM_ADC_CHANNEL);
     tft->init();
     tft->setRotation(INVERTED_LANDSCAPE);
+    // Initialize DMA for display and it's transfer complete callback
     tft->dmaInit([]() {
+        // DMA transfer is complete, send ready flag to lv_disp
         lv_disp_flush_ready(&lv_display_device);
+        // Clear the IRQ flag, must be called so that the IRQ can be called next time
         tft->dmaClearIRQ();
     });
 
@@ -33,20 +36,21 @@ void init_display()
     /*Initialize `lv_display_buffer` with the buffer(s). With only one buffer use NULL instead buf_2 */
     lv_disp_draw_buf_init(&lv_display_buffer, lv_color_buffer, NULL, displayBufferSize);
 
-    /*Initialize the display*/
+    //Initialize the display for LVGL
     lv_disp_drv_init(&lv_display_device);
-    /*Change the following line to your display resolution*/
     lv_display_device.hor_res = tft->width();
     lv_display_device.ver_res = tft->height();
     lv_display_device.flush_cb = lv_display_flush_cb;
     lv_display_device.draw_buf = &lv_display_buffer;
     lv_disp_drv_register(&lv_display_device);
 
+    // Initialize the touchscreen interface
     lv_indev_drv_init(&lv_input_device);
     lv_input_device.type = LV_INDEV_TYPE_POINTER;
     lv_input_device.read_cb = lv_input_touch_cb;
     lv_indev_drv_register(&lv_input_device);
 
+    // Create timer to increase tick of LVGL by 5 for every 5ms
     add_repeating_timer_ms(
         5,
         [](struct repeating_timer *t) -> bool {

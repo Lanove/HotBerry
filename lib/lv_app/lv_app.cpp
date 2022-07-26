@@ -188,9 +188,13 @@ lv_obj_t *app_create_chart(lv_obj_t *_parent, bool _profileGraph, uint8_t _selec
         profileSeries = lv_chart_add_series(chart, lv_palette_main(LV_PALETTE_RED), LV_CHART_AXIS_PRIMARY_Y);
         cursor = lv_chart_add_cursor(chart, md_grad_red, LV_DIR_LEFT | LV_DIR_BOTTOM);
         // Add data points from profile
+        printf("totalSecond %d\n", totalSecond);
         for (int i = 0; i < dataPoint; i++)
+        {
             lv_chart_set_value_by_id(chart, profileSeries, targetSeconds[i], targetTemperatures[i]);
-        // Draw profile graph
+            printf("lvc %d sec %d deg\n", targetSeconds[i],
+                   lv_chart_get_y_array(chart, profileSeries)[targetSeconds[i]]);
+        } // Draw profile graph
         lv_obj_add_event_cb(
             chart,
             [](lv_event_t *e) {
@@ -202,10 +206,11 @@ lv_obj_t *app_create_chart(lv_obj_t *_parent, bool _profileGraph, uint8_t _selec
                     dsc->draw_area->x2 < 480 && dsc->draw_area->y1 > 0 &&
                     dsc->draw_area->y2 < 320) // Store coordinate only on valid points
                 {
+                    printf("cnt %d x %d y %d\n", coord_counter, coords[coord_counter].x, coords[coord_counter].y);
                     coords[coord_counter].x = dsc->draw_area->x1;
                     coords[coord_counter].y = dsc->draw_area->y1;
-                    if (coord_counter ==
-                        dataPoint - 1) // It seems that this is last coordinate, let's draw the profile graph then
+                    // It seems that this is last coordinate, let's draw the profile graph then
+                    if (coord_counter == dataPoint - 1)
                     {
                         // Draw the line for preheating only
                         line_point_cnt = 0;
@@ -219,6 +224,7 @@ lv_obj_t *app_create_chart(lv_obj_t *_parent, bool _profileGraph, uint8_t _selec
                         lv_obj_set_style_line_width(doubleheatLine, 2, 0);
                         lv_obj_set_style_line_color(doubleheatLine, doubleHeatColor, 0);
                         lv_event_send(chart, LV_EVENT_READY, NULL);
+                        // for (int o = 0; o < dataPoint; o++)
                     }
                     coord_counter++;
                 }
